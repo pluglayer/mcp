@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pluglayer-mcp"
+version = "0.1.0"
+description = "PlugLayer MCP server — deploy and manage infrastructure via AI"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+keywords = ["mcp", "pluglayer", "deployment", "kubernetes", "infrastructure"]
+dependencies = [
+    "mcp[cli]>=1.3.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.4.0",
+    "uvicorn[standard]>=0.30.0",
+]
+
+[project.scripts]
+pluglayer-mcp = "pluglayer_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pluglayer_mcp"]
