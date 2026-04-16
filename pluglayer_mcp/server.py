@@ -1,86 +1,142 @@
 """
 PlugLayer MCP Server
 
-Exposes infrastructure management tools to AI assistants via the
-Model Context Protocol (MCP). Users configure this with their
-PLUGLAYER_API_KEY environment variable.
-
-Run:
-    uvx pluglayer-mcp
-    # or
-    PLUGLAYER_API_KEY=xxx pluglayer-mcp
+Exposes PlugLayer project, compute, deployment, CI/CD, and admin tools to AI
+assistants through the Model Context Protocol (MCP). The MCP intentionally goes
+through the FastAPI backend endpoints so auth, roles, ownership, quotas, compute
+checks, k3s orchestration, and admin guards stay in one backend implementation.
 """
 import sys
+from typing import Any
+
 from mcp.server.fastmcp import FastMCP
+
 from pluglayer_mcp.client import PlugLayerClient
 from pluglayer_mcp.settings import settings
 
 mcp = FastMCP(
     "PlugLayer",
     instructions="""You are the PlugLayer infrastructure operator.
-You help users deploy, manage, and monitor their applications on PlugLayer.
+You help users deploy, manage, and monitor applications on PlugLayer.
 
-Key concepts:
-- Projects: isolated namespaces in the k3s cluster (like folders)
-- Nodes: VMs that run the workloads (added via SSH or cloud providers)
-- Deployments: applications running in a project
-- Tasks: async operations — always poll them until complete
+Current PlugLayer rules:
+- Authentik groups are exposed by PlugLayer as user.roles. Do not use groups/permissions fields.
+- Admin tools require the user to have pluglayer-admin or pluglayer-superadmin in roles.
+- Compute is account-level: personal SSH nodes and shared PlugLayer nodes can be used by all projects the user owns.
+- A project is a k3s namespace. A deployment is an app inside a project.
+- Async operations return task IDs; always poll get_task_status until completion.
 
-Workflow for deploying a new app:
-1. List projects or create one if needed
-2. Ensure the project has at least one node
-3. Deploy the app (from image or docker-compose)
-4. Poll the task until complete
-5. Return the app URL to the user
+Deployment workflow:
+1. Run get_current_user and get_compute_summary.
+2. List or create a project.
+3. Ensure can_deploy is true. If false, add a personal SSH node or ask an admin to assign shared compute.
+4. Deploy from image or docker-compose.
+5. Poll the returned task and report the public URL.
 
-Always be proactive about checking status and reporting URLs.
-Confirm destructive actions (delete, rollback) before executing.
+Confirm destructive actions such as delete and rollback before executing them.
 """,
 )
+
+
+# ── Shared helpers ────────────────────────────────────────────────────────────
 
 
 def _client() -> PlugLayerClient:
     return PlugLayerClient(api_key=settings.PLUGLAYER_API_KEY)
 
 
+def _status_emoji(status: str) -> str:
+    return {
+        "active": "✅", "ready": "✅", "running": "🕺", "completed": "✅",
+        "provisioning": "⏳", "pending": "😴", "queued": "⏳", "deploying": "🚀", "joining": "🔗",
+        "in_progress": "⚙️", "scaling": "⚙️",
+        "error": "❌", "failed": "💀", "crash_loop": "🥴", "offline": "💤",
+        "terminated": "🪦", "terminating": "👻", "cancelled": "🚫", "suspended": "⏸️",
+        "deleting": "🧹",
+    }.get(str(status or ""), "❓")
+
+
+def _fmt_compute(compute: dict[str, Any] | None) -> str:
+    c = compute or {}
+    return (
+        f"{c.get('cpu_cores', 0)} CPU, "
+        f"{c.get('ram_gb', 0)}GB RAM, "
+        f"{c.get('storage_gb', 0)}GB disk, "
+        f"{c.get('gpu_gb', 0)}GB GPU"
+    )
+
+
+def _fmt_node(node: dict[str, Any]) -> str:
+    status = node.get("status", "unknown")
+    owner = "shared PlugLayer" if node.get("is_shared") else "personal"
+    return (
+        f"{_status_emoji(status)} **{node.get('name', 'unnamed')}** (id: `{node.get('id')}`)\n"
+        f"   Provider: {node.get('provider')} | Status: {status} | Scope: {owner}\n"
+        f"   Compute: {_fmt_compute(node.get('hardware'))}\n"
+    )
+
+
+def _fmt_task_hint(task_id: str | None) -> str:
+    return f"Poll: `get_task_status('{task_id}')`" if task_id else "No task id returned."
+
+
+def _compact_error(prefix: str, exc: Exception) -> str:
+    return f"{prefix}: {exc}"
+
+
+async def _get_compute_summary() -> dict[str, Any]:
+    return await _client().get("/nodes/compute/summary")
+
+
+# ── Identity / roles ─────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def get_current_user() -> str:
+    """Show the authenticated PlugLayer user and roles from Authentik."""
+    try:
+        user = await _client().get("/auth/me")
+        roles = user.get("roles") or []
+        return (
+            "👤 **Current PlugLayer user**\n"
+            f"Email: {user.get('email')}\n"
+            f"Username: {user.get('username')}\n"
+            f"Roles: {', '.join(roles) if roles else 'none'}\n"
+            f"Superadmin: {'yes' if user.get('is_superuser') else 'no'}"
+        )
+    except Exception as e:
+        return _compact_error("Error loading current user", e)
+
+
 # ── Projects ──────────────────────────────────────────────────────────────────
+
 
 @mcp.tool()
 async def list_projects() -> str:
-    """List all your PlugLayer projects with their status and app count."""
+    """List authenticated user's projects. Normal users see their projects; admins may see admin data via admin tools."""
     try:
         data = await _client().get("/projects")
         if not data:
             return "No projects found. Create one with create_project()."
         lines = ["Your projects:\n"]
         for p in data:
-            status_emoji = {"active": "✅", "provisioning": "⏳", "error": "❌"}.get(p.get("status", ""), "❓")
+            status = p.get("status", "unknown")
             lines.append(
-                f"{status_emoji} **{p['name']}** (id: `{p['id']}`)\n"
-                f"   Status: {p['status']} | Apps: {p.get('deployment_count', 0)} | "
-                f"Nodes: {len(p.get('node_ids', []))}\n"
+                f"{_status_emoji(status)} **{p.get('name')}** (id: `{p.get('id')}`)\n"
+                f"   Status: {status} | Apps: {p.get('deployment_count', 0)}\n"
+                f"   Namespace: `{p.get('namespace')}`\n"
                 f"   URL pattern: {p.get('base_url', 'N/A')}\n"
             )
         return "\n".join(lines)
     except Exception as e:
-        return f"Error listing projects: {e}"
+        return _compact_error("Error listing projects", e)
 
 
 @mcp.tool()
-async def create_project(
-    name: str,
-    description: str = "",
-    domain_type: str = "pluglayer",
-) -> str:
+async def create_project(name: str, description: str = "", domain_type: str = "pluglayer") -> str:
     """
-    Create a new PlugLayer project (k3s namespace).
-
-    Args:
-        name: Project name (e.g., "my-ecommerce-app")
-        description: Optional description
-        domain_type: "pluglayer" for *.apps.pluglayer.io or "custom" for your own domain
-
-    Returns task_id to poll for provisioning completion.
+    Create a PlugLayer project namespace. Project creation only requires authentication.
+    Deployment still requires account-level compute; check get_compute_summary before deploying.
     """
     try:
         data = await _client().post("/projects", {
@@ -88,68 +144,82 @@ async def create_project(
             "description": description,
             "domain_type": domain_type,
         })
+        project = data.get("project", {})
+        task_id = data.get("task_id")
         return (
-            f"✅ Project **{name}** created!\n"
-            f"Project ID: `{data['project']['id']}`\n"
-            f"Namespace: `{data['project']['namespace']}`\n"
-            f"Task ID: `{data['task_id']}`\n\n"
-            f"⏳ Setting up k3s namespace... Poll `get_task_status('{data['task_id']}')` to check progress."
+            f"✅ Project **{project.get('name', name)}** created.\n"
+            f"Project ID: `{project.get('id')}`\n"
+            f"Namespace: `{project.get('namespace')}`\n"
+            f"Task ID: `{task_id}`\n\n"
+            f"⏳ Setting up namespace. {_fmt_task_hint(task_id)}"
         )
     except Exception as e:
-        return f"Error creating project: {e}"
+        return _compact_error("Error creating project", e)
 
 
 @mcp.tool()
 async def get_project(project_id: str) -> str:
-    """Get details of a specific project including apps and nodes."""
+    """Get project details. Accessible to the project owner or a PlugLayer admin role."""
     try:
         p = await _client().get(f"/projects/{project_id}")
-        status_emoji = {"active": "✅", "provisioning": "⏳", "error": "❌"}.get(p.get("status", ""), "❓")
+        status = p.get("status", "unknown")
         return (
-            f"{status_emoji} **{p['name']}**\n"
-            f"ID: `{p['id']}`\n"
-            f"Status: {p['status']}\n"
-            f"Namespace: `{p['namespace']}`\n"
+            f"{_status_emoji(status)} **{p.get('name')}**\n"
+            f"ID: `{p.get('id')}`\n"
+            f"Status: {status}\n"
+            f"Namespace: `{p.get('namespace')}`\n"
             f"URL pattern: {p.get('base_url', 'N/A')}\n"
             f"Apps: {p.get('deployment_count', 0)}\n"
-            f"Nodes: {len(p.get('node_ids', []))}"
+            "Compute is account-level; use get_compute_summary() for available capacity."
         )
     except Exception as e:
-        return f"Error getting project: {e}"
+        return _compact_error("Error getting project", e)
 
 
-# ── Nodes ─────────────────────────────────────────────────────────────────────
+# ── Compute / nodes ───────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def get_compute_summary() -> str:
+    """Show accessible account-level compute: personal SSH nodes plus shared PlugLayer nodes."""
+    try:
+        data = await _get_compute_summary()
+        counts = data.get("counts", {})
+        lines = [
+            "🧮 **Compute Summary**",
+            f"Can deploy: {'yes' if data.get('can_deploy') else 'no'}",
+            f"Message: {data.get('message')}",
+            f"Accessible nodes: {counts.get('accessible', 0)} total, {counts.get('ready', 0)} ready",
+            f"Personal nodes: {counts.get('personal', 0)} total, {counts.get('personal_ready', 0)} ready",
+            f"PlugLayer shared nodes: {counts.get('pluglayer', 0)} total, {counts.get('pluglayer_ready', 0)} ready",
+            f"Total ready compute: {_fmt_compute(data.get('total_compute'))}",
+            f"Personal ready compute: {_fmt_compute(data.get('personal_compute'))}",
+            f"Shared ready compute: {_fmt_compute(data.get('pluglayer_compute'))}",
+        ]
+        purchase = data.get("purchase") or {}
+        if purchase.get("message"):
+            lines.append(f"Purchase: {purchase['message']}")
+        return "\n".join(lines)
+    except Exception as e:
+        return _compact_error("Error loading compute summary", e)
+
 
 @mcp.tool()
 async def list_nodes(project_id: str = "") -> str:
     """
-    List all nodes (VMs) in your cluster.
-
-    Args:
-        project_id: Optional — filter by project
+    List compute nodes accessible to the authenticated user.
+    Compute is account-level; project_id is accepted only for backwards compatibility.
     """
     try:
         params = {"project_id": project_id} if project_id else {}
         data = await _client().get("/nodes", params=params)
         if not data:
-            return "No nodes found. Add one with add_node_ssh()."
-        lines = ["Your nodes:\n"]
-        for n in data:
-            status_emoji = {
-                "ready": "✅", "provisioning": "⚙️", "joining": "🔗",
-                "error": "❌", "offline": "💤",
-            }.get(n.get("status", ""), "❓")
-            hw = n.get("hardware", {})
-            hw_str = ""
-            if hw.get("cpu_cores"):
-                hw_str = f" | {hw['cpu_cores']} CPU, {hw.get('ram_gb', '?')}GB RAM, {hw.get('storage_gb', '?')}GB disk"
-            lines.append(
-                f"{status_emoji} **{n['name']}** (id: `{n['id']}`)\n"
-                f"   Provider: {n['provider']} | Status: {n['status']}{hw_str}\n"
-            )
+            return "No accessible compute nodes found. Add one with add_node_ssh(), or ask an admin to assign shared compute."
+        lines = ["Accessible compute nodes:\n"]
+        lines.extend(_fmt_node(n) for n in data)
         return "\n".join(lines)
     except Exception as e:
-        return f"Error listing nodes: {e}"
+        return _compact_error("Error listing compute nodes", e)
 
 
 @mcp.tool()
@@ -162,53 +232,43 @@ async def add_node_ssh(
     port: int = 22,
 ) -> str:
     """
-    Add a VM to the cluster via SSH. PlugLayer will:
-    1. Test the SSH connection
-    2. Install k3s agent
-    3. Join the node to the cluster
+    Add a personal SSH node/VM as account-level compute.
 
-    Args:
-        project_id: The project this node belongs to
-        name: Friendly name for this node (e.g., "prod-node-01")
-        host: IP address or hostname of the VM
-        ssh_private_key: The SSH private key content (-----BEGIN RSA PRIVATE KEY-----)
-        user: SSH username (default: root)
-        port: SSH port (default: 22)
-
-    Returns task_id — poll get_task_status() to track provisioning.
+    project_id is optional/backwards-compatible setup context. The node belongs to the authenticated
+    user and can be used by all of that user's projects. Pass an empty string when no project context is needed.
     """
+    if not name or not host or not ssh_private_key:
+        return "Missing required fields: name, host, and ssh_private_key are required."
     try:
-        data = await _client().post("/nodes", {
-            "project_id": project_id,
+        payload = {
             "name": name,
             "provider": "ssh",
             "ssh_host": host,
             "ssh_port": port,
             "ssh_user": user,
             "ssh_private_key": ssh_private_key,
-        })
+        }
+        if project_id:
+            payload["project_id"] = project_id
+        data = await _client().post("/nodes", payload)
         task_id = data.get("task_id")
+        node = data.get("node", {})
         return (
-            f"✅ SSH connection verified for {host}!\n"
-            f"Node ID: `{data['node']['id']}`\n"
+            f"✅ SSH node queued as personal account compute.\n"
+            f"Node: **{node.get('name', name)}** (id: `{node.get('id')}`)\n"
             f"Task ID: `{task_id}`\n\n"
-            f"⚙️ Installing k3s agent... This takes 1–3 minutes.\n"
-            f"Poll: `get_task_status('{task_id}')` to track progress."
+            f"⚙️ Installing k3s agent and detecting CPU/RAM/storage/GPU. {_fmt_task_hint(task_id)}"
         )
     except Exception as e:
-        return f"❌ Failed to add node: {e}"
+        return _compact_error("Failed to add SSH node", e)
 
 
 # ── Deployments ───────────────────────────────────────────────────────────────
 
+
 @mcp.tool()
 async def list_deployments(project_id: str = "") -> str:
-    """
-    List all deployments (apps) in your projects.
-
-    Args:
-        project_id: Optional — filter by project
-    """
+    """List deployments/apps. Optionally filter by project_id."""
     try:
         params = {"project_id": project_id} if project_id else {}
         data = await _client().get("/deployments", params=params)
@@ -216,19 +276,18 @@ async def list_deployments(project_id: str = "") -> str:
             return "No deployments found. Deploy an app with deploy_image() or deploy_compose()."
         lines = ["Your deployments:\n"]
         for d in data:
-            status_emoji = {
-                "running": "🕺", "pending": "😴", "deploying": "🚀",
-                "failed": "💀", "crash_loop": "🥴", "terminated": "🪦",
-            }.get(d.get("status", ""), "❓")
-            url = d.get("primary_url", "")
+            status = d.get("status", "unknown")
+            image = d.get("image") or "compose"
+            tag = d.get("tag") or ""
+            image_ref = f"{image}:{tag}" if tag else image
             lines.append(
-                f"{status_emoji} **{d['name']}** (id: `{d['id']}`)\n"
-                f"   Status: {d['status']} | Image: {d['image']}:{d['tag']}\n"
-                f"   URL: {url or 'not yet available'}\n"
+                f"{_status_emoji(status)} **{d.get('name')}** (id: `{d.get('id')}`)\n"
+                f"   Status: {status} | Source: {d.get('source_type', 'image')} | Image: {image_ref}\n"
+                f"   URL: {d.get('primary_url') or 'not yet available'}\n"
             )
         return "\n".join(lines)
     except Exception as e:
-        return f"Error listing deployments: {e}"
+        return _compact_error("Error listing deployments", e)
 
 
 @mcp.tool()
@@ -237,29 +296,21 @@ async def deploy_image(
     name: str,
     image: str,
     tag: str = "latest",
-    ports: list[int] = None,
-    env_vars: dict = None,
+    ports: list[int] | None = None,
+    env_vars: dict[str, str] | None = None,
     replicas: int = 1,
     cpu_limit: str = "500m",
     memory_limit: str = "512Mi",
 ) -> str:
     """
-    Deploy a Docker image as an app in a project.
-
-    Args:
-        project_id: The project to deploy into
-        name: App name (e.g., "my-api")
-        image: Docker image (e.g., "nginx", "ghcr.io/myorg/myapp")
-        tag: Image tag (default: "latest")
-        ports: List of ports to expose (e.g., [8000, 3000])
-        env_vars: Environment variables dict (e.g., {"DATABASE_URL": "postgres://..."})
-        replicas: Number of replicas (default: 1)
-        cpu_limit: CPU limit (default: "500m" = 0.5 CPU)
-        memory_limit: Memory limit (default: "512Mi")
-
-    Returns task_id — poll get_task_status() to track deployment.
+    Deploy a Docker image into a project. Requires authentication, project ownership, and schedulable compute.
+    Run get_compute_summary first if you are unsure compute is available.
     """
     try:
+        compute = await _get_compute_summary()
+        if not compute.get("can_deploy"):
+            return f"Cannot deploy yet: {compute.get('message')}\nAdd personal compute with add_node_ssh(), or ask an admin for shared PlugLayer compute."
+
         data = await _client().post("/deployments/from-image", {
             "project_id": project_id,
             "name": name,
@@ -274,33 +325,24 @@ async def deploy_image(
         task_id = data.get("task_id")
         dep = data.get("deployment", {})
         return (
-            f"🚀 Deployment queued!\n"
+            f"🚀 Deployment queued.\n"
             f"App: **{name}** (id: `{dep.get('id')}`)\n"
             f"Image: `{image}:{tag}`\n"
             f"Task ID: `{task_id}`\n\n"
-            f"⏳ Deploying to k3s... Poll: `get_task_status('{task_id}')`"
+            f"⏳ Deploying to k3s. {_fmt_task_hint(task_id)}"
         )
     except Exception as e:
-        return f"❌ Deployment failed: {e}"
+        return _compact_error("Deployment failed", e)
 
 
 @mcp.tool()
-async def deploy_compose(
-    project_id: str,
-    compose_yaml: str,
-    app_name: str = "",
-) -> str:
-    """
-    Deploy a docker-compose.yml to a project. PlugLayer converts it to k8s manifests automatically.
-
-    Args:
-        project_id: The project to deploy into
-        compose_yaml: The full content of your docker-compose.yml file
-        app_name: Optional name override for this deployment group
-
-    Returns task_id — poll get_task_status() to track deployment.
-    """
+async def deploy_compose(project_id: str, compose_yaml: str, app_name: str = "") -> str:
+    """Deploy docker-compose.yml into a project. Requires schedulable compute; PlugLayer converts compose to k8s manifests."""
     try:
+        compute = await _get_compute_summary()
+        if not compute.get("can_deploy"):
+            return f"Cannot deploy yet: {compute.get('message')}\nAdd personal compute with add_node_ssh(), or ask an admin for shared PlugLayer compute."
+
         data = await _client().post("/deployments/from-compose", {
             "project_id": project_id,
             "compose_yaml": compose_yaml,
@@ -309,179 +351,208 @@ async def deploy_compose(
         task_id = data.get("task_id")
         dep = data.get("deployment", {})
         return (
-            f"🚀 Compose deployment queued!\n"
+            f"🚀 Compose deployment queued.\n"
             f"Deployment ID: `{dep.get('id')}`\n"
             f"Task ID: `{task_id}`\n\n"
-            f"⏳ Converting compose → k8s manifests and deploying...\n"
-            f"Poll: `get_task_status('{task_id}')`"
+            f"⏳ Converting compose to k8s and deploying. {_fmt_task_hint(task_id)}"
         )
     except Exception as e:
-        return f"❌ Compose deployment failed: {e}"
+        return _compact_error("Compose deployment failed", e)
 
 
 @mcp.tool()
 async def get_deployment_status(deployment_id: str) -> str:
-    """Get the current status and URL of a deployment."""
+    """Get the current deployment status, k8s replica state, and public URL."""
     try:
         d = await _client().get(f"/deployments/{deployment_id}/status")
-        status_emoji = {
-            "running": "🕺", "pending": "😴", "deploying": "🚀",
-            "failed": "💀", "crash_loop": "🥴", "terminated": "🪦",
-        }.get(str(d.get("db_status", "")), "❓")
-
+        status = d.get("db_status", "unknown")
         k8s = d.get("k8s_status", {}) or {}
         result = (
-            f"{status_emoji} **Deployment Status**\n"
-            f"Status: {d.get('db_status')}\n"
+            f"{_status_emoji(status)} **Deployment Status**\n"
+            f"Status: {status}\n"
             f"URL: {d.get('primary_url') or 'not yet available'}\n"
         )
         if k8s:
             result += f"Replicas: {k8s.get('ready_replicas', 0)}/{k8s.get('replicas', 0)} ready\n"
         return result
     except Exception as e:
-        return f"Error getting deployment status: {e}"
+        return _compact_error("Error getting deployment status", e)
 
 
 @mcp.tool()
 async def get_logs(deployment_id: str, lines: int = 100) -> str:
-    """
-    Get recent logs from a deployment.
-
-    Args:
-        deployment_id: The deployment ID
-        lines: Number of log lines to retrieve (default: 100)
-    """
+    """Get recent logs from a deployment."""
     try:
         data = await _client().get(f"/deployments/{deployment_id}/logs", params={"lines": lines})
         logs = data.get("logs", "No logs available")
         return f"📋 **Logs** (last {lines} lines):\n\n```\n{logs}\n```"
     except Exception as e:
-        return f"Error getting logs: {e}"
+        return _compact_error("Error getting logs", e)
 
 
 @mcp.tool()
 async def redeploy(deployment_id: str) -> str:
-    """
-    Redeploy an existing deployment (re-pull image and restart pods).
-
-    Args:
-        deployment_id: The deployment ID to redeploy
-    """
+    """Redeploy an existing deployment. Requires owner/admin access and schedulable compute."""
     try:
         data = await _client().post(f"/deployments/{deployment_id}/redeploy")
         task_id = data.get("task_id")
-        return f"🔄 Redeployment queued! Task ID: `{task_id}`\nPoll: `get_task_status('{task_id}')`"
+        return f"🔄 Redeployment queued. Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
     except Exception as e:
-        return f"Error triggering redeploy: {e}"
+        return _compact_error("Error triggering redeploy", e)
 
 
 @mcp.tool()
-async def rollback(deployment_id: str, revision: int = None) -> str:
-    """
-    Roll back a deployment to a previous version.
-
-    Args:
-        deployment_id: The deployment ID
-        revision: Specific revision number to roll back to (optional — defaults to previous)
-    """
+async def rollback(deployment_id: str, revision: int | None = None) -> str:
+    """Roll back a deployment to a previous revision. Confirm with the user before calling."""
     try:
         params = {"revision": revision} if revision else {}
-        data = await _client().post(f"/deployments/{deployment_id}/rollback", params)
+        data = await _client().post(f"/deployments/{deployment_id}/rollback", params=params)
         task_id = data.get("task_id")
         rev = data.get("rolled_back_to", {})
         return (
-            f"⏪ Rollback queued!\n"
+            f"⏪ Rollback queued.\n"
             f"Rolling back to: `{rev.get('image')}:{rev.get('tag')}` (revision {rev.get('revision')})\n"
-            f"Task ID: `{task_id}`\n"
-            f"Poll: `get_task_status('{task_id}')`"
+            f"Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
         )
     except Exception as e:
-        return f"Error triggering rollback: {e}"
+        return _compact_error("Error triggering rollback", e)
 
 
 @mcp.tool()
 async def delete_deployment(deployment_id: str) -> str:
-    """
-    DESTRUCTIVE: Delete a deployment and remove it from k3s.
-    This will stop the app and remove its ingress. Cannot be undone.
-
-    Args:
-        deployment_id: The deployment ID to delete
-    """
+    """DESTRUCTIVE: Delete a deployment and remove it from k3s. Confirm with the user before calling."""
     try:
         await _client().delete(f"/deployments/{deployment_id}")
         return f"🗑️ Deployment `{deployment_id}` deleted and removed from cluster."
     except Exception as e:
-        return f"Error deleting deployment: {e}"
+        return _compact_error("Error deleting deployment", e)
 
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
+
 @mcp.tool()
 async def get_task_status(task_id: str) -> str:
-    """
-    Check the status of an async operation (provisioning, deployment, etc.)
-
-    Args:
-        task_id: The task ID returned from any async operation
-
-    Returns current status, progress percentage, and result when complete.
-    """
+    """Check async operation status, progress, result URL, or error."""
     try:
         t = await _client().get(f"/tasks/{task_id}")
-        status_emoji = {
-            "queued": "⏳", "in_progress": "⚙️",
-            "completed": "✅", "failed": "❌", "cancelled": "🚫",
-        }.get(t.get("status", ""), "❓")
-
-        progress = t.get("progress", {})
-        pct = progress.get("percentage", 0)
-        msg = progress.get("message", "")
-        step = progress.get("step", 0)
-        total = progress.get("total_steps", 0)
-
+        status = t.get("status", "unknown")
+        progress = t.get("progress", {}) or {}
+        result = t.get("result") or {}
         result_str = ""
-        if t.get("result"):
-            result = t["result"]
-            if result.get("primary_url"):
-                result_str = f"\n🌐 App URL: {result['primary_url']}"
-            elif result.get("k3s_node_name"):
-                result_str = f"\n🖥️ Node joined as: {result['k3s_node_name']}"
-
-        error_str = ""
-        if t.get("error_message"):
-            error_str = f"\n❌ Error: {t['error_message']}"
-
+        if result.get("primary_url"):
+            result_str = f"\n🌐 App URL: {result['primary_url']}"
+        elif result.get("k3s_node_name"):
+            result_str = f"\n🖥️ Node joined as: {result['k3s_node_name']}"
+        elif result:
+            result_str = f"\nResult: {result}"
+        error_str = f"\n❌ Error: {t['error_message']}" if t.get("error_message") else ""
         return (
-            f"{status_emoji} **Task {t.get('type', '')}**\n"
-            f"Status: {t['status']}\n"
-            f"Progress: {round(pct)}% — {msg}\n"
-            f"Steps: {step}/{total}"
+            f"{_status_emoji(status)} **Task {t.get('type', '')}**\n"
+            f"Status: {status}\n"
+            f"Progress: {round(progress.get('percentage', 0))}% — {progress.get('message', '')}\n"
+            f"Steps: {progress.get('step', 0)}/{progress.get('total_steps', 0)}"
             f"{result_str}{error_str}"
         )
     except Exception as e:
-        return f"Error getting task: {e}"
+        return _compact_error("Error getting task", e)
+
+
+# ── Admin tools ────────────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def admin_get_overview() -> str:
+    """Admin only: summarize platform tasks, capacity events, nodes, and compute defaults."""
+    try:
+        tasks = await _client().get("/admin/tasks", params={"limit": 10})
+        events = await _client().get("/admin/capacity-events", params={"limit": 10})
+        nodes = await _client().get("/admin/nodes")
+        compute = await _client().get("/admin/compute/settings")
+        stats = tasks.get("stats", {})
+        return (
+            "🛡️ **Admin Overview**\n"
+            f"Projects: {stats.get('projects', 0)} | Deployments: {stats.get('deployments', 0)} | Nodes: {stats.get('nodes', 0)} | Tasks today: {stats.get('tasks_today', 0)}\n"
+            f"Unresolved capacity events: {events.get('unresolved_count', 0)}\n"
+            f"Registered nodes: {len(nodes.get('nodes', []))}\n"
+            f"Default quota: {_fmt_compute(compute.get('default_quota'))}\n"
+        )
+    except Exception as e:
+        return _compact_error("Admin overview failed (requires pluglayer-admin or pluglayer-superadmin role)", e)
+
+
+@mcp.tool()
+async def admin_set_compute_defaults(
+    cpu_cores: float,
+    ram_gb: float,
+    storage_gb: int,
+    gpu_gb: float = 0,
+    allow_shared_compute: bool = True,
+) -> str:
+    """Admin only: update default compute quota metadata shown to new users."""
+    try:
+        await _client().put("/admin/compute/settings", {
+            "allow_shared_compute": allow_shared_compute,
+            "default_quota": {
+                "cpu_cores": cpu_cores,
+                "ram_gb": ram_gb,
+                "storage_gb": storage_gb,
+                "gpu_gb": gpu_gb,
+            },
+        })
+        return f"✅ Default compute saved: {_fmt_compute({'cpu_cores': cpu_cores, 'ram_gb': ram_gb, 'storage_gb': storage_gb, 'gpu_gb': gpu_gb})}"
+    except Exception as e:
+        return _compact_error("Failed to update admin compute defaults", e)
+
+
+@mcp.tool()
+async def admin_set_node_shared(node_id: str, is_shared: bool = True) -> str:
+    """Admin only: mark an existing node as shared PlugLayer compute or private."""
+    try:
+        data = await _client().patch(f"/admin/nodes/{node_id}/sharing", {"is_shared": is_shared})
+        warning = f"\nWarning: {data['warning']}" if data.get("warning") else ""
+        return f"✅ Node `{node_id}` shared={data.get('is_shared', is_shared)}.{warning}"
+    except Exception as e:
+        return _compact_error("Failed to update node sharing", e)
+
+
+@mcp.tool()
+async def admin_add_shared_ssh_node(
+    name: str,
+    host: str,
+    ssh_private_key: str,
+    user: str = "root",
+    port: int = 22,
+) -> str:
+    """Admin only: add an SSH node as PlugLayer-owned shared compute for all users."""
+    if not name or not host or not ssh_private_key:
+        return "Missing required fields: name, host, and ssh_private_key are required."
+    try:
+        data = await _client().post("/admin/nodes/ssh", {
+            "name": name,
+            "provider": "ssh",
+            "ssh_host": host,
+            "ssh_port": port,
+            "ssh_user": user,
+            "ssh_private_key": ssh_private_key,
+        })
+        task_id = data.get("task_id")
+        node = data.get("node", {})
+        return (
+            f"✅ Shared PlugLayer SSH node queued.\n"
+            f"Node: **{node.get('name', name)}** (id: `{node.get('id')}`)\n"
+            f"Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
+        )
+    except Exception as e:
+        return _compact_error("Failed to add shared SSH node", e)
 
 
 # ── CI/CD ─────────────────────────────────────────────────────────────────────
 
+
 @mcp.tool()
-async def generate_github_actions(
-    project_id: str,
-    deployment_id: str,
-    github_org: str = "your-org",
-) -> str:
-    """
-    Generate a GitHub Actions workflow YAML for CI/CD.
-    Automatically builds and pushes your Docker image, then deploys to PlugLayer.
-
-    Args:
-        project_id: Your project ID
-        deployment_id: The deployment to update on each push
-        github_org: Your GitHub organization or username
-
-    Returns the workflow YAML to save as .github/workflows/deploy.yml
-    """
+async def generate_github_actions(project_id: str, deployment_id: str, github_org: str = "your-org") -> str:
+    """Generate a GitHub Actions workflow YAML for PlugLayer CI/CD."""
     try:
         data = await _client().get("/cicd/generate/github-actions", params={
             "project_id": project_id,
@@ -494,31 +565,29 @@ async def generate_github_actions(
             f"📋 **GitHub Actions Workflow**\n"
             f"Save as: `{filename}`\n\n"
             f"```yaml\n{workflow}\n```\n\n"
-            f"**Setup steps:**\n"
-            f"1. Create this file in your repo\n"
-            f"2. Add `PLUGLAYER_API_KEY` secret in GitHub repo settings\n"
-            f"3. Push to main/master to trigger a deploy!"
+            "Setup steps:\n"
+            "1. Create this file in your repo.\n"
+            "2. Add `PLUGLAYER_API_KEY` as a GitHub secret.\n"
+            "3. Push to main/master to trigger deploys."
         )
     except Exception as e:
-        return f"Error generating pipeline: {e}"
+        return _compact_error("Error generating pipeline", e)
 
 
 # ── Utility ───────────────────────────────────────────────────────────────────
 
+
 @mcp.tool()
 async def get_cluster_health() -> str:
-    """Check the health of your PlugLayer cluster (k3s nodes, API status)."""
+    """Check PlugLayer API and k3s health."""
     try:
         health = await _client().get("/health")
         k3s = await _client().get("/health/k3s")
-
         api_emoji = "✅" if health.get("api") == "ok" else "❌"
         db_emoji = "✅" if health.get("mongodb") == "ok" else "❌"
-
         node_count = len(k3s.get("node_list", []))
         k3s_status = k3s.get("k3s", "unknown")
         k3s_emoji = "✅" if k3s_status == "ok" else "❌"
-
         return (
             f"🏥 **Cluster Health**\n"
             f"{api_emoji} API: {health.get('api', 'unknown')}\n"
@@ -526,7 +595,7 @@ async def get_cluster_health() -> str:
             f"{k3s_emoji} k3s: {k3s_status} ({node_count} nodes)\n"
         )
     except Exception as e:
-        return f"Cluster health check failed: {e}"
+        return _compact_error("Cluster health check failed", e)
 
 
 def main():
@@ -540,7 +609,6 @@ def main():
             file=sys.stderr,
         )
 
-    # Run as HTTP transport for remote MCP
     mcp.run(transport="streamable-http")
 
 
