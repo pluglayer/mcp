@@ -18,29 +18,38 @@ class PlugLayerClient:
             "User-Agent": "pluglayer-mcp/0.1.0",
         }
 
-    async def get(self, path: str, params: dict = None) -> Any:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(f"{self.base_url}{path}", headers=self.headers, params=params)
-            resp.raise_for_status()
+    async def _request(self, method: str, path: str, *, params: dict = None, data: dict = None, timeout: float = 30.0) -> Any:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.request(
+                method,
+                f"{self.base_url}{path}",
+                headers=self.headers,
+                params=params,
+                json=data,
+            )
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                detail = resp.text[:500]
+                raise RuntimeError(f"{resp.status_code} {resp.reason_phrase}: {detail}") from exc
+            if resp.status_code == 204 or not resp.content:
+                return {}
             return resp.json()
 
-    async def post(self, path: str, data: dict = None) -> Any:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(f"{self.base_url}{path}", headers=self.headers, json=data or {})
-            resp.raise_for_status()
-            return resp.json()
+    async def get(self, path: str, params: dict = None) -> Any:
+        return await self._request("GET", path, params=params, timeout=30.0)
+
+    async def post(self, path: str, data: dict = None, params: dict = None) -> Any:
+        return await self._request("POST", path, params=params, data=data or {}, timeout=60.0)
 
     async def delete(self, path: str) -> Any:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.delete(f"{self.base_url}{path}", headers=self.headers)
-            resp.raise_for_status()
-            return resp.json()
+        return await self._request("DELETE", path, timeout=30.0)
 
     async def patch(self, path: str, data: dict) -> Any:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.patch(f"{self.base_url}{path}", headers=self.headers, json=data)
-            resp.raise_for_status()
-            return resp.json()
+        return await self._request("PATCH", path, data=data, timeout=30.0)
+
+    async def put(self, path: str, data: dict) -> Any:
+        return await self._request("PUT", path, data=data, timeout=30.0)
 
 
 def get_client(api_key: Optional[str] = None) -> PlugLayerClient:
