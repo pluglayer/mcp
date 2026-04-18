@@ -34,7 +34,10 @@ class PlugLayerClient:
                 raise RuntimeError(f"{resp.status_code} {resp.reason_phrase}: {detail}") from exc
             if resp.status_code == 204 or not resp.content:
                 return {}
-            return resp.json()
+            data = resp.json()
+            if isinstance(data, dict) and data.get("ok") is True and "data" in data:
+                return data["data"]
+            return data
 
     async def get(self, path: str, params: dict = None) -> Any:
         return await self._request("GET", path, params=params, timeout=30.0)
