@@ -36,6 +36,7 @@ def register_deployment_tools(mcp):
         ports: list[int] | None = None,
         env_vars: dict[str, str] | None = None,
         replicas: int = 1,
+        route_slug: str = "",
         cpu_limit: str = "500m",
         memory_limit: str = "512Mi",
     ) -> str:
@@ -46,6 +47,7 @@ def register_deployment_tools(mcp):
                 return f"Cannot deploy yet: {compute.get('message')}"
             data = await _client().post(f"/v1/projects/{project_id}/apps", {
                 "name": name,
+                "route_slug": route_slug or None,
                 "source": {
                     "type": "image",
                     "image": image,
@@ -64,7 +66,7 @@ def register_deployment_tools(mcp):
             return _compact_error("Deployment failed", e)
 
     @mcp.tool()
-    async def deploy_compose(project_id: str, compose_yaml: str, app_name: str = "") -> str:
+    async def deploy_compose(project_id: str, compose_yaml: str, app_name: str = "", route_slug: str = "") -> str:
         """Deploy docker-compose.yml into a project."""
         try:
             compute = await _get_compute_summary()
@@ -72,6 +74,7 @@ def register_deployment_tools(mcp):
                 return f"Cannot deploy yet: {compute.get('message')}"
             data = await _client().post(f"/v1/projects/{project_id}/apps", {
                 "name": app_name or "compose-app",
+                "route_slug": route_slug or None,
                 "source": {"type": "compose", "compose_yaml": compose_yaml},
             })
             task_id = data.get("task_id")

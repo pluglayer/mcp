@@ -75,6 +75,12 @@ The MCP calls the PlugLayer FastAPI backend instead of re-implementing backend b
 | `redeploy` | Redeploy an app |
 | `rollback` | Roll back to previous version |
 | `delete_deployment` | Delete an app |
+| `list_project_domains` | List custom domains for a project |
+| `add_custom_domain` | Add a single or wildcard custom domain and return DNS records |
+| `verify_custom_domain` | Verify TXT/CNAME DNS and activate if attached |
+| `attach_custom_domain` | Attach a verified custom domain to an app |
+| `detach_custom_domain` | Detach a domain while keeping verification |
+| `remove_custom_domain` | Remove a domain and its route |
 | `get_task_status` | Poll async operation progress |
 | `admin_get_overview` | Admin-only platform summary |
 | `admin_set_compute_defaults` | Admin-only default compute quota metadata |
@@ -96,6 +102,9 @@ The MCP calls the PlugLayer FastAPI backend instead of re-implementing backend b
 
 **CI/CD setup:**
 > "Generate a GitHub Actions workflow for my `api` deployment so it auto-deploys on push to main."
+
+**Add a custom domain:**
+> "Add `api.example.com` to my production project, show me the DNS records, then verify it and attach it to my API app."
 
 ## Getting Your API Key
 
