@@ -11,7 +11,7 @@ def register_task_admin_tools(mcp):
     async def get_task_status(task_id: str) -> str:
         """Check async operation status, progress, result URL, or error."""
         try:
-            data = await _client().get(f"/v1/tasks/{task_id}")
+            data = await _client().get(f"/v1/plugin/tasks/{task_id}")
             t = data.get("task", data)
             status = t.get("status", "unknown")
             progress = t.get("progress", {}) or {}
@@ -43,16 +43,13 @@ def register_task_admin_tools(mcp):
     async def admin_get_overview() -> str:
         """Admin only: summarize platform tasks, capacity events, nodes, and compute defaults."""
         try:
-            tasks = await _client().get("/v1/admin/tasks", params={"limit": 10})
-            events = await _client().get("/v1/admin/capacity-events", params={"limit": 10})
-            nodes = await _client().get("/v1/admin/nodes")
-            compute = await _client().get("/v1/admin/compute/settings")
-            stats = tasks.get("stats", {})
+            overview = await _client().get("/v1/plugin/admin/overview")
+            compute = await _client().get("/v1/plugin/admin/compute/settings")
+            stats = overview.get("stats", {})
             return (
                 "🛡️ **Admin Overview**\n"
                 f"Projects: {stats.get('projects', 0)} | Deployments: {stats.get('deployments', 0)} | Nodes: {stats.get('nodes', 0)} | Tasks today: {stats.get('tasks_today', 0)}\n"
-                f"Unresolved capacity events: {events.get('unresolved_count', 0)}\n"
-                f"Registered nodes: {len(nodes.get('nodes', []))}\n"
+                f"Registered nodes: {stats.get('nodes', 0)}\n"
                 f"Default quota: {_fmt_compute(compute.get('default_quota'))}\n"
             )
         except Exception as e:
@@ -69,7 +66,7 @@ def register_task_admin_tools(mcp):
     ) -> str:
         """Admin only: update default compute quota metadata shown to new users."""
         try:
-            await _client().put("/v1/admin/compute/settings", {
+            await _client().put("/v1/plugin/admin/compute/settings", {
                 "allow_shared_compute": allow_shared_compute,
                 "default_quota": {
                     "cpu_cores": cpu_cores,
@@ -87,7 +84,7 @@ def register_task_admin_tools(mcp):
     async def admin_set_node_shared(node_id: str, is_shared: bool = True) -> str:
         """Admin only: mark an existing node as shared PlugLayer compute or private."""
         try:
-            data = await _client().patch(f"/v1/admin/nodes/{node_id}/sharing", {"is_shared": is_shared})
+            data = await _client().patch(f"/v1/plugin/admin/nodes/{node_id}/sharing", {"is_shared": is_shared})
             warning = f"\nWarning: {data['warning']}" if data.get("warning") else ""
             return f"✅ Node `{node_id}` shared={data.get('is_shared', is_shared)}.{warning}"
         except Exception as e:
@@ -106,7 +103,7 @@ def register_task_admin_tools(mcp):
         if not name or not host or not ssh_private_key:
             return "Missing required fields: name, host, and ssh_private_key are required."
         try:
-            data = await _client().post("/v1/admin/nodes/ssh", {
+            data = await _client().post("/v1/plugin/admin/nodes/ssh", {
                 "name": name,
                 "provider": "ssh",
                 "ssh_host": host,

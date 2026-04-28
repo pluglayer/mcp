@@ -11,7 +11,8 @@ def register_identity_project_tools(mcp):
     async def get_current_user() -> str:
         """Show the authenticated PlugLayer user and roles from Authentik."""
         try:
-            user = await _client().get("/v1/auth/me")
+            payload = await _client().get("/v1/plugin/me")
+            user = payload.get("user", payload)
             roles = user.get("roles") or []
             return (
                 "👤 **Current PlugLayer user**\n"
@@ -31,7 +32,7 @@ def register_identity_project_tools(mcp):
     async def list_projects() -> str:
         """List authenticated user's projects. Normal users see their projects; admins may see admin data via admin tools."""
         try:
-            data = await _client().get("/v1/projects")
+            data = await _client().get("/v1/plugin/projects")
             projects = data.get("projects", [])
             if not projects:
                 return "No projects found. Create one with create_project()."
@@ -56,7 +57,7 @@ def register_identity_project_tools(mcp):
         Deployment still requires account-level compute; check get_compute_summary before deploying.
         """
         try:
-            data = await _client().post("/v1/projects", {
+            data = await _client().post("/v1/plugin/projects", {
                 "name": name,
                 "description": description,
                 "domain_type": domain_type,
@@ -78,7 +79,7 @@ def register_identity_project_tools(mcp):
     async def get_project(project_id: str) -> str:
         """Get project details. Accessible to the project owner or a PlugLayer admin role."""
         try:
-            p = await _client().get(f"/v1/projects/{project_id}")
+            p = await _client().get(f"/v1/plugin/projects/{project_id}")
             p = p.get("project", p)
             status = p.get("status", "unknown")
             return (

@@ -9,7 +9,7 @@ def register_deployment_tools(mcp):
         """List apps. Optionally filter by project_id."""
         try:
             params = {"project_id": project_id} if project_id else {}
-            data = await _client().get("/v1/apps", params=params)
+            data = await _client().get("/v1/plugin/apps", params=params)
             apps = data.get("apps", [])
             if not apps:
                 return "No apps found. Deploy one with deploy_image() or deploy_compose()."
@@ -39,15 +39,17 @@ def register_deployment_tools(mcp):
         route_slug: str = "",
         cpu_limit: str = "500m",
         memory_limit: str = "512Mi",
+        compute_placement: str = "auto",
     ) -> str:
         """Deploy a Docker image into a project. Requires schedulable compute."""
         try:
             compute = await _get_compute_summary()
             if not compute.get("can_deploy"):
                 return f"Cannot deploy yet: {compute.get('message')}"
-            data = await _client().post(f"/v1/projects/{project_id}/apps", {
+            data = await _client().post(f"/v1/plugin/projects/{project_id}/apps", {
                 "name": name,
                 "route_slug": route_slug or None,
+                "compute_placement": compute_placement,
                 "source": {
                     "type": "image",
                     "image": image,
@@ -66,15 +68,22 @@ def register_deployment_tools(mcp):
             return _compact_error("Deployment failed", e)
 
     @mcp.tool()
-    async def deploy_compose(project_id: str, compose_yaml: str, app_name: str = "", route_slug: str = "") -> str:
+    async def deploy_compose(
+        project_id: str,
+        compose_yaml: str,
+        app_name: str = "",
+        route_slug: str = "",
+        compute_placement: str = "auto",
+    ) -> str:
         """Deploy docker-compose.yml into a project."""
         try:
             compute = await _get_compute_summary()
             if not compute.get("can_deploy"):
                 return f"Cannot deploy yet: {compute.get('message')}"
-            data = await _client().post(f"/v1/projects/{project_id}/apps", {
+            data = await _client().post(f"/v1/plugin/projects/{project_id}/apps", {
                 "name": app_name or "compose-app",
                 "route_slug": route_slug or None,
+                "compute_placement": compute_placement,
                 "source": {"type": "compose", "compose_yaml": compose_yaml},
             })
             task_id = data.get("task_id")
@@ -87,7 +96,7 @@ def register_deployment_tools(mcp):
     async def get_deployment_status(deployment_id: str) -> str:
         """Get current app/deployment status and public URL."""
         try:
-            data = await _client().get(f"/v1/apps/{deployment_id}/status")
+            data = await _client().get(f"/v1/plugin/apps/{deployment_id}/status")
             app = data.get("app", {})
             k8s = (data.get("runtime") or {}).get("k8s_status") or {}
             status = app.get("status", "unknown")
@@ -102,7 +111,7 @@ def register_deployment_tools(mcp):
     async def get_logs(deployment_id: str, lines: int = 100) -> str:
         """Get recent logs from an app."""
         try:
-            data = await _client().get(f"/v1/apps/{deployment_id}/logs", params={"tail": lines})
+            data = await _client().get(f"/v1/plugin/apps/{deployment_id}/logs", params={"tail": lines})
             return f"📋 **Logs** (last {lines} lines):\n\n```\n{data.get('logs', 'No logs available')}\n```"
         except Exception as e:
             return _compact_error("Error getting logs", e)
@@ -111,7 +120,7 @@ def register_deployment_tools(mcp):
     async def redeploy(deployment_id: str) -> str:
         """Redeploy an existing app."""
         try:
-            data = await _client().post(f"/v1/apps/{deployment_id}/redeploy")
+            data = await _client().post(f"/v1/plugin/apps/{deployment_id}/redeploy")
             task_id = data.get("task_id")
             return f"🔄 Redeployment queued. Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
         except Exception as e:
@@ -122,7 +131,7 @@ def register_deployment_tools(mcp):
         """Roll back an app to a previous revision."""
         try:
             params = {"revision": revision} if revision else {}
-            data = await _client().post(f"/v1/apps/{deployment_id}/rollback", params=params)
+            data = await _client().post(f"/v1/plugin/apps/{deployment_id}/rollback", params=params)
             task_id = data.get("task_id")
             return f"⏪ Rollback queued. Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
         except Exception as e:
@@ -132,7 +141,7 @@ def register_deployment_tools(mcp):
     async def delete_deployment(deployment_id: str) -> str:
         """DESTRUCTIVE: delete an app and remove it from k3s."""
         try:
-            await _client().delete(f"/v1/apps/{deployment_id}")
+            await _client().delete(f"/v1/plugin/apps/{deployment_id}")
             return f"🗑️ App `{deployment_id}` deleted and removed from cluster."
         except Exception as e:
             return _compact_error("Error deleting app", e)

@@ -6,13 +6,13 @@ Deploy and manage your infrastructure through natural language with any MCP-comp
 
 ### Option 1: uvx (recommended — no install needed)
 ```bash
-PLUGLAYER_API_KEY=your-token uvx pluglayer-mcp
+PLUGLAYER_API_KEY=your-pluglayer-api-token uvx pluglayer-mcp
 ```
 
 ### Option 2: pip
 ```bash
 pip install pluglayer-mcp
-PLUGLAYER_API_KEY=your-token pluglayer-mcp
+PLUGLAYER_API_KEY=your-pluglayer-api-token pluglayer-mcp
 ```
 
 ## Configuration
@@ -27,7 +27,7 @@ Add to `~/.config/Claude/claude_desktop_config.json`:
       "command": "uvx",
       "args": ["pluglayer-mcp"],
       "env": {
-        "PLUGLAYER_API_KEY": "your-token-from-portal"
+        "PLUGLAYER_API_KEY": "your-pluglayer-api-token"
       }
     }
   }
@@ -42,7 +42,7 @@ Add to `~/.cursor/mcp.json`:
     "command": "uvx",
     "args": ["pluglayer-mcp"],
     "env": {
-      "PLUGLAYER_API_KEY": "your-token"
+      "PLUGLAYER_API_KEY": "your-pluglayer-api-token"
     }
   }
 }
@@ -51,12 +51,12 @@ Add to `~/.cursor/mcp.json`:
 ### Remote HTTP (hosted)
 The remote MCP server runs at `mcp.pluglayer.com`. Pass your token as:
 ```
-Authorization: Bearer your-token
+Authorization: Bearer your-pluglayer-api-token
 ```
 
 ## Available Tools
 
-The MCP calls the PlugLayer FastAPI backend instead of re-implementing backend business logic. Auth, roles, ownership, compute guards, k3s orchestration, and admin checks remain in the backend.
+The MCP calls the PlugLayer FastAPI backend instead of re-implementing backend business logic. Auth, roles, ownership, compute guards, k3s orchestration, and admin checks remain in the backend. MCP and editor plugins should authenticate with a **PlugLayer API token** created in the PlugLayer Settings page, not the browser/session auth token.
 
 | Tool | Description |
 |------|-------------|
@@ -108,6 +108,7 @@ The MCP calls the PlugLayer FastAPI backend instead of re-implementing backend b
 
 ## Getting Your API Key
 
-1. Go to [portal.pluglayer.com](https://portal.pluglayer.com)
-2. Navigate to Settings
-3. Copy your API token
+1. Go to PlugLayer Settings
+2. Create a **PlugLayer API token**
+3. Copy it once and store it safely
+4. Use it as `PLUGLAYER_API_KEY` for MCP, editor plugins, and CI/CD webhook deploys

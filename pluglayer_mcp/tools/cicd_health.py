@@ -8,7 +8,7 @@ def register_cicd_health_tools(mcp):
     async def generate_github_actions(project_id: str, deployment_id: str, github_org: str = "your-org") -> str:
         """Generate a GitHub Actions workflow YAML for PlugLayer CI/CD."""
         try:
-            data = await _client().get("/v1/cicd/generate/github-actions", params={
+            data = await _client().get("/v1/plugin/cicd/generate/github-actions", params={
                 "project_id": project_id,
                 "deployment_id": deployment_id,
                 "repo": github_org,
@@ -31,11 +31,11 @@ def register_cicd_health_tools(mcp):
     async def get_cluster_health() -> str:
         """Check PlugLayer API and k3s cluster health."""
         try:
-            health = await _client().get("/v1/health")
-            k3s = await _client().get("/v1/health/k3s")
+            health = await _client().get("/v1/plugin/health")
+            k3s = await _client().get("/v1/plugin/health/k3s")
             return (
                 "🩺 **PlugLayer Health**\n"
-                f"API: {health.get('status', 'unknown')}\n"
+                f"API: {health.get('api', 'unknown')}\n"
                 f"k3s: {'healthy' if k3s.get('ok') else 'unavailable'} — {k3s.get('message', '')}"
             )
         except Exception as e:

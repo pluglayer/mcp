@@ -40,7 +40,7 @@ def register_compute_tools(mcp):
         """
         try:
             params = {"project_id": project_id} if project_id else {}
-            data = await _client().get("/v1/compute/nodes", params=params)
+            data = await _client().get("/v1/plugin/compute/nodes", params=params)
             nodes = data.get("nodes", [])
             if not nodes:
                 return "No accessible compute nodes found. Add one with add_node_ssh(), or ask an admin to assign shared compute."
@@ -79,7 +79,7 @@ def register_compute_tools(mcp):
             }
             if project_id:
                 payload["project_id"] = project_id
-            data = await _client().post("/v1/compute/nodes", payload)
+            data = await _client().post("/v1/plugin/compute/nodes", payload)
             task_id = data.get("task_id")
             node = data.get("node", {})
             return (
