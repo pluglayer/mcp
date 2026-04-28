@@ -19,7 +19,7 @@ def register_domain_tools(mcp):
     async def list_project_domains(project_id: str) -> str:
         """List custom domains for a project."""
         try:
-            data = await _client().get(f"/v1/projects/{project_id}/domains")
+            data = await _client().get(f"/v1/plugin/projects/{project_id}/domains")
             domains = data.get("domains", [])
             if not domains:
                 return "No custom domains are configured for this project."
@@ -31,7 +31,7 @@ def register_domain_tools(mcp):
     async def add_custom_domain(project_id: str, domain: str, mode: str = "single", app_id: str = "") -> str:
         """Add a custom domain. mode is 'single' or 'wildcard'."""
         try:
-            data = await _client().post(f"/v1/projects/{project_id}/domains", {
+            data = await _client().post(f"/v1/plugin/projects/{project_id}/domains", {
                 "domain": domain,
                 "mode": mode,
                 "app_id": app_id or None,
@@ -45,7 +45,7 @@ def register_domain_tools(mcp):
     async def verify_custom_domain(domain_id: str) -> str:
         """Verify TXT/CNAME DNS for a custom domain and activate it if attached."""
         try:
-            data = await _client().post(f"/v1/domains/{domain_id}/verify")
+            data = await _client().post(f"/v1/plugin/domains/{domain_id}/verify")
             return _fmt_domain(data.get("domain", {}))
         except Exception as e:
             return _compact_error("Error verifying domain", e)
@@ -54,7 +54,7 @@ def register_domain_tools(mcp):
     async def attach_custom_domain(domain_id: str, app_id: str, make_primary: bool = False) -> str:
         """Attach a verified custom domain to an app."""
         try:
-            data = await _client().post(f"/v1/domains/{domain_id}/attach", {
+            data = await _client().post(f"/v1/plugin/domains/{domain_id}/attach", {
                 "app_id": app_id,
                 "make_primary": make_primary,
             })
@@ -66,7 +66,7 @@ def register_domain_tools(mcp):
     async def detach_custom_domain(domain_id: str) -> str:
         """Detach a custom domain from its app while keeping verification."""
         try:
-            data = await _client().post(f"/v1/domains/{domain_id}/detach")
+            data = await _client().post(f"/v1/plugin/domains/{domain_id}/detach")
             return _fmt_domain(data.get("domain", {}))
         except Exception as e:
             return _compact_error("Error detaching domain", e)
@@ -75,7 +75,7 @@ def register_domain_tools(mcp):
     async def remove_custom_domain(domain_id: str) -> str:
         """Remove a custom domain and its Traefik route."""
         try:
-            await _client().delete(f"/v1/domains/{domain_id}")
+            await _client().delete(f"/v1/plugin/domains/{domain_id}")
             return f"Custom domain `{domain_id}` removed."
         except Exception as e:
             return _compact_error("Error removing domain", e)
