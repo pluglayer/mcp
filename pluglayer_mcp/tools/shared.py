@@ -50,4 +50,4 @@ def _compact_error(prefix: str, exc: Exception) -> str:
 
 
 async def _get_compute_summary() -> dict[str, Any]:
-    return await _client().get("/v1/compute")
+    return await _client().get("/v1/plugin/compute")
