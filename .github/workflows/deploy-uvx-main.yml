@@ -9,7 +9,7 @@ on:
       - uv.lock
       - README.md
       - pluglayer_mcp/**
-      - .github/workflows/deploy-uvx.yml
+      - .github/workflows/deploy-uvx-main.yml
   workflow_dispatch:
 
 permissions:
@@ -49,6 +49,35 @@ jobs:
 
           uv sync --frozen
           uv run python -m compileall pluglayer_mcp
+
+      - name: Stamp publish version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="0.$(date -u +%y).$(date -u +%m%d%H)"
+
+          python3 - <<PY
+          from pathlib import Path
+          import re
+
+          path = Path("pyproject.toml")
+          text = path.read_text(encoding="utf-8")
+          updated, count = re.subn(
+              r'^version = "[^"]+"$',
+              f'version = "{VERSION}"',
+              text,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          if count != 1:
+              raise SystemExit("Could not update project version in pyproject.toml")
+          path.write_text(updated, encoding="utf-8")
+          print(updated)
+          PY
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Build distributions
         shell: bash
