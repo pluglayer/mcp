@@ -92,7 +92,7 @@ After publishing:
 
 ## Available Tools
 
-The MCP calls the PlugLayer FastAPI backend instead of re-implementing backend business logic. Auth, roles, ownership, compute guards, k3s orchestration, and admin checks remain in the backend. MCP and editor plugins should authenticate with a **PlugLayer API token** created in the PlugLayer Settings page, not the browser/session auth token.
+The MCP calls the PlugLayer FastAPI backend instead of re-implementing backend business logic. Auth, roles, ownership, compute guards, and k3s orchestration remain in the backend. MCP and editor plugins should authenticate with a **PlugLayer API token** created in the PlugLayer Settings page, not the browser/session auth token.
 
 Managed registries are configured by PlugLayer admins in the platform UI/API. When `deploy_image` uses mirroring, the backend picks a registry the current user is allowed to use and keeps Kubernetes pull secrets in sync automatically.
 
@@ -121,10 +121,6 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | `detach_custom_domain` | Detach a domain while keeping verification |
 | `remove_custom_domain` | Remove a domain and its route |
 | `get_task_status` | Poll async operation progress |
-| `admin_get_overview` | Admin-only platform summary |
-| `admin_set_compute_defaults` | Admin-only default compute quota metadata |
-| `admin_set_node_shared` | Admin-only mark node shared/private |
-| `admin_add_shared_ssh_node` | Admin-only add shared PlugLayer SSH compute |
 | `generate_github_actions` | Get CI/CD pipeline YAML |
 | `get_cluster_health` | Check cluster status |
 
