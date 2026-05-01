@@ -20,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 pluglayer-mcp = "pluglayer_mcp.server:main"
+pluglayer-mcp-http = "pluglayer_mcp.server:serve_http"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pluglayer_mcp"]
