@@ -10,6 +10,7 @@ PLUGLAYER_API_KEY=your-pluglayer-api-token uvx pluglayer-mcp
 ```
 
 This local command mode uses the MCP `stdio` transport by default, which is the right mode for Cursor, Claude Code, and other editor-launched command servers.
+The `pluglayer-mcp` command now always uses `stdio` so editor clients cannot accidentally switch it into HTTP mode.
 
 ### Option 2: pip
 ```bash
@@ -27,6 +28,7 @@ Add to `~/.config/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "pluglayer": {
       "command": "uvx",
+      "type": "stdio",
       "args": ["pluglayer-mcp"],
       "env": {
         "PLUGLAYER_API_KEY": "your-pluglayer-api-token"
@@ -42,6 +44,7 @@ Add to `~/.cursor/mcp.json`:
 {
   "pluglayer": {
     "command": "uvx",
+    "type": "stdio",
     "args": ["pluglayer-mcp"],
     "env": {
       "PLUGLAYER_API_KEY": "your-pluglayer-api-token"
@@ -56,10 +59,10 @@ The remote MCP server runs at `mcp.pluglayer.com`. Pass your token as:
 Authorization: Bearer your-pluglayer-api-token
 ```
 
-If you intentionally want to run the package itself as an HTTP MCP server, set:
+If you intentionally want to run the package itself as an HTTP MCP server, use:
 
 ```bash
-MCP_TRANSPORT=streamable-http
+pluglayer-mcp-http
 ```
 
 ## Release Checklist
@@ -84,8 +87,8 @@ After publishing:
 
 - For `command`-based MCP setup, use `uvx pluglayer-mcp`.
 - Do not force HTTP transport for local editor usage.
-- `pluglayer-mcp` defaults to `stdio`, which is the correct transport for Cursor-launched command servers.
-- Only use `MCP_TRANSPORT=streamable-http` when you intentionally want to run the package itself as an HTTP MCP server.
+- `pluglayer-mcp` always uses `stdio`, which is the correct transport for Cursor-launched command servers.
+- Only use `pluglayer-mcp-http` when you intentionally want to run the package itself as an HTTP MCP server.
 
 ## Available Tools
 

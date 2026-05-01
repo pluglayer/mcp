@@ -1,5 +1,4 @@
 from functools import lru_cache
-from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -7,7 +6,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     PLUGLAYER_API_URL: str = Field(default="")
     PLUGLAYER_API_KEY: str = ""  # Set by user via env var
-    MCP_TRANSPORT: Literal["stdio", "streamable-http", "sse"] = "stdio"
     MCP_HOST: str = "127.0.0.1"
     MCP_PORT: int = 0
     DEBUG: bool = False
