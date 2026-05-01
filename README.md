@@ -9,6 +9,8 @@ Deploy and manage your infrastructure through natural language with any MCP-comp
 PLUGLAYER_API_KEY=your-pluglayer-api-token uvx pluglayer-mcp
 ```
 
+This local command mode uses the MCP `stdio` transport by default, which is the right mode for Cursor, Claude Code, and other editor-launched command servers.
+
 ### Option 2: pip
 ```bash
 pip install pluglayer-mcp
@@ -53,6 +55,37 @@ The remote MCP server runs at `mcp.pluglayer.com`. Pass your token as:
 ```
 Authorization: Bearer your-pluglayer-api-token
 ```
+
+If you intentionally want to run the package itself as an HTTP MCP server, set:
+
+```bash
+MCP_TRANSPORT=streamable-http
+```
+
+## Release Checklist
+
+Before publishing a new `pluglayer-mcp` build:
+
+1. Confirm local command mode still uses `stdio` by default.
+2. Confirm `PLUGLAYER_API_URL` override works when pointed at a dev API.
+3. Confirm package version will be unique for the publish run.
+4. Publish from the public repo `main` branch after reviewing the `dev -> main` PR.
+
+After publishing:
+
+1. Restart Cursor, Claude Code, or the MCP client you are testing.
+2. If the editor still behaves like an older MCP build, remove and re-add the MCP server entry, then restart the editor.
+3. Re-test with a simple command such as:
+   - `get_current_user`
+   - `list_projects`
+   - `get_compute_summary`
+
+## Cursor Notes
+
+- For `command`-based MCP setup, use `uvx pluglayer-mcp`.
+- Do not force HTTP transport for local editor usage.
+- `pluglayer-mcp` defaults to `stdio`, which is the correct transport for Cursor-launched command servers.
+- Only use `MCP_TRANSPORT=streamable-http` when you intentionally want to run the package itself as an HTTP MCP server.
 
 ## Available Tools
 
