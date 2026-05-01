@@ -9,11 +9,14 @@ checks, k3s orchestration, and admin guards stay in one backend implementation.
 import sys
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import Icon
 
 from pluglayer_mcp.settings import settings
 
 mcp = FastMCP(
     "PlugLayer",
+    website_url="https://pluglayer.com",
+    icons=[Icon(src="https://pluglayer.com/favicon.ico")],
     instructions="""You are the PlugLayer infrastructure operator.
 You help users deploy, manage, and monitor applications on PlugLayer.
 
@@ -34,6 +37,8 @@ Deployment workflow:
 
 Confirm destructive actions such as delete and rollback before executing them.
 """,
+    host=settings.MCP_HOST,
+    port=settings.MCP_PORT,
 )
 
 from pluglayer_mcp.tools.cicd_health import register_cicd_health_tools
@@ -62,7 +67,7 @@ def main():
             file=sys.stderr,
         )
 
-    mcp.run(transport="streamable-http")
+    mcp.run(transport=settings.MCP_TRANSPORT)
 
 
 if __name__ == "__main__":
