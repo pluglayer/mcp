@@ -9,11 +9,6 @@ Deploy and manage your infrastructure through natural language with any MCP-comp
 PLUGLAYER_API_KEY=your-pluglayer-api-token uvx pluglayer-mcp
 ```
 
-Optional:
-```bash
-PLUGLAYER_API_BASE_URL=https://api.pluglayer.com
-```
-
 ### Option 2: pip
 ```bash
 pip install pluglayer-mcp
@@ -32,8 +27,7 @@ Add to `~/.config/Claude/claude_desktop_config.json`:
       "command": "uvx",
       "args": ["pluglayer-mcp"],
       "env": {
-        "PLUGLAYER_API_KEY": "your-pluglayer-api-token",
-        "PLUGLAYER_API_BASE_URL": "https://api.pluglayer.com"
+        "PLUGLAYER_API_KEY": "your-pluglayer-api-token"
       }
     }
   }
@@ -48,8 +42,7 @@ Add to `~/.cursor/mcp.json`:
     "command": "uvx",
     "args": ["pluglayer-mcp"],
     "env": {
-      "PLUGLAYER_API_KEY": "your-pluglayer-api-token",
-      "PLUGLAYER_API_BASE_URL": "https://api.pluglayer.com"
+      "PLUGLAYER_API_KEY": "your-pluglayer-api-token"
     }
   }
 }
@@ -60,12 +53,6 @@ The remote MCP server runs at `mcp.pluglayer.com`. Pass your token as:
 ```
 Authorization: Bearer your-pluglayer-api-token
 ```
-
-### API base URL behavior
-
-- `PLUGLAYER_API_BASE_URL` is the preferred environment variable for the backend API origin.
-- If it is unset or empty, the MCP defaults to `https://api.pluglayer.com`.
-- `PLUGLAYER_API_URL` is still accepted as a legacy fallback during migration.
 
 ## Available Tools
 
