@@ -1,0 +1,70 @@
+name: Publish pluglayer-mcp
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - pyproject.toml
+      - uv.lock
+      - README.md
+      - pluglayer_mcp/**
+      - .github/workflows/deploy-uvx.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-pluglayer-mcp
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and publish to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+    steps:
+      - name: Checkout package repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Validate package metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f pyproject.toml
+          test -f pluglayer_mcp/server.py
+          test -f README.md
+
+          uv sync --frozen
+          uv run python -m compileall pluglayer_mcp
+
+      - name: Build distributions
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv build
+
+      - name: Publish to PyPI
+        shell: bash
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${UV_PUBLISH_TOKEN:-}" ]]; then
+            uv publish
+          else
+            uv publish --trusted-publishing always
+          fi
