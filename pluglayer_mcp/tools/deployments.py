@@ -5,6 +5,25 @@ from pluglayer_mcp.tools.shared import _client, _compact_error, _fmt_task_hint, 
 
 def register_deployment_tools(mcp):
     @mcp.tool()
+    async def list_registries() -> str:
+        """List registry destinations available to the current user."""
+        try:
+            data = await _client().get("/v1/plugin/registries")
+            registries = data.get("registries", [])
+            if not registries:
+                return "No registries are available to you yet. Ask an admin to configure a system or personal registry first."
+            lines = ["Available registries:\n"]
+            for registry in registries:
+                lines.append(
+                    f"- **{registry.get('name')}** (`{registry.get('id')}`)\n"
+                    f"  Provider: {registry.get('provider')} | Scope: {registry.get('scope')} | Namespace: {registry.get('namespace')}\n"
+                    f"  Last test: {registry.get('last_test', {}).get('message') or 'unknown'}\n"
+                )
+            return "\n".join(lines)
+        except Exception as e:
+            return _compact_error("Error listing registries", e)
+
+    @mcp.tool()
     async def list_deployments(project_id: str = "") -> str:
         """List apps. Optionally filter by project_id."""
         try:
@@ -40,16 +59,19 @@ def register_deployment_tools(mcp):
         cpu_limit: str = "500m",
         memory_limit: str = "512Mi",
         compute_placement: str = "auto",
+        push_to_pluglayer_registry: bool = True,
+        registry_id: str = "",
     ) -> str:
-        """Deploy a Docker image into a project. Requires schedulable compute."""
+        """Deploy a Docker image into a project. By default, mirror it into PlugLayer's managed registry first."""
         try:
             compute = await _get_compute_summary()
             if not compute.get("can_deploy"):
                 return f"Cannot deploy yet: {compute.get('message')}"
-            data = await _client().post(f"/v1/plugin/projects/{project_id}/apps", {
+            payload = {
                 "name": name,
                 "route_slug": route_slug or None,
                 "compute_placement": compute_placement,
+                "registry_id": registry_id or None,
                 "source": {
                     "type": "image",
                     "image": image,
@@ -60,10 +82,21 @@ def register_deployment_tools(mcp):
                     "cpu_limit": cpu_limit,
                     "memory_limit": memory_limit,
                 },
-            })
+            }
+            endpoint = (
+                f"/v1/plugin/projects/{project_id}/apps/push-image"
+                if push_to_pluglayer_registry
+                else f"/v1/plugin/projects/{project_id}/apps"
+            )
+            data = await _client().post(endpoint, payload)
             task_id = data.get("task_id")
             app = data.get("app", {})
-            return f"🚀 App queued: **{name}** (id: `{app.get('id')}`). Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
+            mirrored = data.get("mirrored_image")
+            lines = [f"🚀 App queued: **{name}** (id: `{app.get('id')}`). Task ID: `{task_id}`"]
+            if mirrored:
+                lines.append(f"Mirrored image: `{mirrored}`")
+            lines.append(_fmt_task_hint(task_id))
+            return "\n".join(lines)
         except Exception as e:
             return _compact_error("Deployment failed", e)
 
