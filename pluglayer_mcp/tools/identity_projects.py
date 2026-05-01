@@ -30,7 +30,7 @@ def register_identity_project_tools(mcp):
 
     @mcp.tool()
     async def list_projects() -> str:
-        """List authenticated user's projects. Normal users see their projects; admins may see admin data via admin tools."""
+        """List the authenticated user's projects."""
         try:
             data = await _client().get("/v1/plugin/projects")
             projects = data.get("projects", [])
