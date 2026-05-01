@@ -9,6 +9,11 @@ Deploy and manage your infrastructure through natural language with any MCP-comp
 PLUGLAYER_API_KEY=your-pluglayer-api-token uvx pluglayer-mcp
 ```
 
+Optional:
+```bash
+PLUGLAYER_API_BASE_URL=https://api.pluglayer.com
+```
+
 ### Option 2: pip
 ```bash
 pip install pluglayer-mcp
@@ -27,7 +32,8 @@ Add to `~/.config/Claude/claude_desktop_config.json`:
       "command": "uvx",
       "args": ["pluglayer-mcp"],
       "env": {
-        "PLUGLAYER_API_KEY": "your-pluglayer-api-token"
+        "PLUGLAYER_API_KEY": "your-pluglayer-api-token",
+        "PLUGLAYER_API_BASE_URL": "https://api.pluglayer.com"
       }
     }
   }
@@ -42,7 +48,8 @@ Add to `~/.cursor/mcp.json`:
     "command": "uvx",
     "args": ["pluglayer-mcp"],
     "env": {
-      "PLUGLAYER_API_KEY": "your-pluglayer-api-token"
+      "PLUGLAYER_API_KEY": "your-pluglayer-api-token",
+      "PLUGLAYER_API_BASE_URL": "https://api.pluglayer.com"
     }
   }
 }
@@ -54,9 +61,17 @@ The remote MCP server runs at `mcp.pluglayer.com`. Pass your token as:
 Authorization: Bearer your-pluglayer-api-token
 ```
 
+### API base URL behavior
+
+- `PLUGLAYER_API_BASE_URL` is the preferred environment variable for the backend API origin.
+- If it is unset or empty, the MCP defaults to `https://api.pluglayer.com`.
+- `PLUGLAYER_API_URL` is still accepted as a legacy fallback during migration.
+
 ## Available Tools
 
 The MCP calls the PlugLayer FastAPI backend instead of re-implementing backend business logic. Auth, roles, ownership, compute guards, k3s orchestration, and admin checks remain in the backend. MCP and editor plugins should authenticate with a **PlugLayer API token** created in the PlugLayer Settings page, not the browser/session auth token.
+
+Managed registries are configured by PlugLayer admins in the platform UI/API. When `deploy_image` uses mirroring, the backend picks a registry the current user is allowed to use and keeps Kubernetes pull secrets in sync automatically.
 
 | Tool | Description |
 |------|-------------|
@@ -67,7 +82,8 @@ The MCP calls the PlugLayer FastAPI backend instead of re-implementing backend b
 | `get_compute_summary` | Show account-level personal + shared compute capacity |
 | `list_nodes` | List accessible compute nodes |
 | `add_node_ssh` | Add a personal SSH node usable by all of the user's projects |
-| `deploy_image` | Deploy a Docker image after backend compute checks |
+| `list_registries` | List the registries currently available to the user |
+| `deploy_image` | Mirror a Docker image into PlugLayer's managed Docker Hub namespace, then deploy it after backend compute checks |
 | `deploy_compose` | Deploy from docker-compose.yml after backend compute checks |
 | `list_deployments` | List running apps/deployments |
 | `get_deployment_status` | Check app status and URL |

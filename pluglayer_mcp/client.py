@@ -8,7 +8,7 @@ class PlugLayerClient:
 
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
         self.api_key = api_key or settings.PLUGLAYER_API_KEY
-        self.base_url = (base_url or settings.PLUGLAYER_API_URL).rstrip("/")
+        self.base_url = (base_url or settings.resolved_api_base_url).rstrip("/")
 
     @property
     def headers(self) -> dict:
