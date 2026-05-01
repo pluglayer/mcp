@@ -57,7 +57,7 @@ register_cicd_health_tools(mcp)
 
 
 def main():
-    """Entry point for `pluglayer-mcp` command."""
+    """Editor-safe entry point for `pluglayer-mcp` command."""
     if not settings.PLUGLAYER_API_KEY:
         print(
             "WARNING: PLUGLAYER_API_KEY not set!\n"
@@ -67,7 +67,16 @@ def main():
             file=sys.stderr,
         )
 
-    mcp.run(transport=settings.MCP_TRANSPORT)
+    # Command-based MCP clients like Cursor and Claude Code expect stdio.
+    # Keep this entry point transport-stable even if the parent process
+    # happens to export environment variables that would otherwise suggest
+    # an HTTP transport.
+    mcp.run(transport="stdio")
+
+
+def serve_http():
+    """Explicit HTTP entry point for hosted or local streamable HTTP serving."""
+    mcp.run(transport="streamable-http")
 
 
 if __name__ == "__main__":
