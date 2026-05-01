@@ -57,16 +57,19 @@ jobs:
           set -euo pipefail
 
           VERSION="0.$(date -u +%y).$(date -u +%m%d%H)"
+          export VERSION
 
           python3 - <<PY
+          import os
           from pathlib import Path
           import re
 
+          version = os.environ["VERSION"]
           path = Path("pyproject.toml")
           text = path.read_text(encoding="utf-8")
           updated, count = re.subn(
               r'^version = "[^"]+"$',
-              f'version = "{VERSION}"',
+              f'version = "{version}"',
               text,
               count=1,
               flags=re.MULTILINE,
