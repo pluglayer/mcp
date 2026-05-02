@@ -2,6 +2,20 @@
 
 This repository exposes PlugLayer's end-user MCP server. Contributions should improve the end-user deployment experience, reliability, documentation, and safe integrations.
 
+## Step-by-step contribution flow
+
+1. Star the repository if you want to follow updates.
+2. Open an issue first if the change is large, changes tool behavior, or needs design discussion.
+3. Fork the repository to your own GitHub account.
+4. Clone your fork locally.
+5. Create a feature branch from your fork's `dev` branch if it exists. If not, create the branch from `main`.
+6. Make one focused change at a time.
+7. Run the local validation steps before pushing.
+8. Push your branch to your fork.
+9. Open a pull request from your fork branch into the public `dev` branch.
+10. Respond to review feedback and update the same branch.
+11. After maintainers review and merge, the change can be promoted through the normal maintainer flow into `main`.
+
 ## Before you start
 
 - Read `README.md` first.
@@ -72,6 +86,7 @@ export PLUGLAYER_API_URL=https://api.dev.pluglayer.com
 - Describe the user-visible behavior change
 - Include test or validation notes
 - Mention any MCP tool name additions, removals, or schema changes
+- Target the public `dev` branch unless a maintainer explicitly asks for a different base branch
 
 ## Security
 
