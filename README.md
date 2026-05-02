@@ -103,10 +103,10 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | `get_my_projects` | Alias for listing the current user's projects |
 | `create_project` | Create a new project namespace |
 | `get_project` | Get project details |
-| `get_compute_summary` | Show account-level personal + shared compute capacity |
-| `get_my_available_compute` | Show the current user's available compute capacity |
+| `get_compute_summary` | Show account-level personal + shared compute capacity; estimate first when sizing is still unclear |
+| `get_my_available_compute` | Show the current user's available compute capacity; pair with estimate first for planning |
 | `get_my_available_computes` | Alias for available compute capacity |
-| `estimate_compute` | Estimate required compute, monthly price, and a tailored offer link |
+| `estimate_compute` | Estimate required compute, monthly price, and a tailored offer link; preferred before purchase/allocation decisions |
 | `list_nodes` | List accessible compute nodes |
 | `add_node_ssh` | Add a personal SSH node usable by all of the user's projects |
 | `list_registries` | List the registries currently available to the user |
