@@ -92,7 +92,7 @@ After publishing:
 
 ## Available Tools
 
-The MCP calls the PlugLayer FastAPI backend instead of re-implementing backend business logic. Auth, roles, ownership, compute guards, k3s orchestration, and admin checks remain in the backend. MCP and editor plugins should authenticate with a **PlugLayer API token** created in the PlugLayer Settings page, not the browser/session auth token.
+The MCP calls the PlugLayer FastAPI backend instead of re-implementing backend business logic. Auth, roles, ownership, compute guards, and k3s orchestration remain in the backend. MCP and editor plugins should authenticate with a **PlugLayer API token** created in the PlugLayer Settings page, not the browser/session auth token.
 
 Managed registries are configured by PlugLayer admins in the platform UI/API. When `deploy_image` uses mirroring, the backend picks a registry the current user is allowed to use and keeps Kubernetes pull secrets in sync automatically.
 
@@ -100,18 +100,25 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 |------|-------------|
 | `get_current_user` | Show the Authentik-backed user and `roles` |
 | `list_projects` | List authenticated user's projects |
+| `get_my_projects` | Alias for listing the current user's projects |
 | `create_project` | Create a new project namespace |
 | `get_project` | Get project details |
-| `get_compute_summary` | Show account-level personal + shared compute capacity |
+| `get_compute_summary` | Show account-level personal + shared compute capacity; estimate first when sizing is still unclear |
+| `get_my_available_compute` | Show the current user's available compute capacity; pair with estimate first for planning |
+| `get_my_available_computes` | Alias for available compute capacity |
+| `estimate_compute` | Estimate required compute, monthly price, and a tailored offer link; preferred before purchase/allocation decisions |
 | `list_nodes` | List accessible compute nodes |
 | `add_node_ssh` | Add a personal SSH node usable by all of the user's projects |
 | `list_registries` | List the registries currently available to the user |
 | `deploy_image` | Mirror a Docker image into PlugLayer's managed Docker Hub namespace, then deploy it after backend compute checks |
 | `deploy_compose` | Deploy from docker-compose.yml after backend compute checks |
 | `list_deployments` | List running apps/deployments |
+| `get_apps_by_project` | List apps inside a specific project |
 | `get_deployment_status` | Check app status and URL |
 | `get_logs` | Get app logs |
+| `get_app_logs` | Alias for getting app logs |
 | `redeploy` | Redeploy an app |
+| `restart_app` | Alias for restarting an app by redeploying it |
 | `rollback` | Roll back to previous version |
 | `delete_deployment` | Delete an app |
 | `list_project_domains` | List custom domains for a project |
@@ -121,10 +128,6 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | `detach_custom_domain` | Detach a domain while keeping verification |
 | `remove_custom_domain` | Remove a domain and its route |
 | `get_task_status` | Poll async operation progress |
-| `admin_get_overview` | Admin-only platform summary |
-| `admin_set_compute_defaults` | Admin-only default compute quota metadata |
-| `admin_set_node_shared` | Admin-only mark node shared/private |
-| `admin_add_shared_ssh_node` | Admin-only add shared PlugLayer SSH compute |
 | `generate_github_actions` | Get CI/CD pipeline YAML |
 | `get_cluster_health` | Check cluster status |
 

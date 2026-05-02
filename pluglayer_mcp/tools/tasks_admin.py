@@ -1,9 +1,9 @@
-"""Tasks Admin MCP tools."""
+"""Task status MCP tools."""
 
-from pluglayer_mcp.tools.shared import _client, _compact_error, _fmt_compute, _fmt_task_hint, _status_emoji
+from pluglayer_mcp.tools.shared import _client, _compact_error, _status_emoji
 
 
-def register_task_admin_tools(mcp):
+def register_task_tools(mcp):
     # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 
@@ -34,89 +34,3 @@ def register_task_admin_tools(mcp):
             )
         except Exception as e:
             return _compact_error("Error getting task", e)
-
-
-    # ── Admin tools ────────────────────────────────────────────────────────────────
-
-
-    @mcp.tool()
-    async def admin_get_overview() -> str:
-        """Admin only: summarize platform tasks, capacity events, nodes, and compute defaults."""
-        try:
-            overview = await _client().get("/v1/plugin/admin/overview")
-            compute = await _client().get("/v1/plugin/admin/compute/settings")
-            stats = overview.get("stats", {})
-            return (
-                "🛡️ **Admin Overview**\n"
-                f"Projects: {stats.get('projects', 0)} | Deployments: {stats.get('deployments', 0)} | Nodes: {stats.get('nodes', 0)} | Tasks today: {stats.get('tasks_today', 0)}\n"
-                f"Registered nodes: {stats.get('nodes', 0)}\n"
-                f"Default quota: {_fmt_compute(compute.get('default_quota'))}\n"
-            )
-        except Exception as e:
-            return _compact_error("Admin overview failed (requires pluglayer-admin or pluglayer-superadmin role)", e)
-
-
-    @mcp.tool()
-    async def admin_set_compute_defaults(
-        cpu_cores: float,
-        ram_gb: float,
-        storage_gb: int,
-        gpu_gb: float = 0,
-        allow_shared_compute: bool = True,
-    ) -> str:
-        """Admin only: update default compute quota metadata shown to new users."""
-        try:
-            await _client().put("/v1/plugin/admin/compute/settings", {
-                "allow_shared_compute": allow_shared_compute,
-                "default_quota": {
-                    "cpu_cores": cpu_cores,
-                    "ram_gb": ram_gb,
-                    "storage_gb": storage_gb,
-                    "gpu_gb": gpu_gb,
-                },
-            })
-            return f"✅ Default compute saved: {_fmt_compute({'cpu_cores': cpu_cores, 'ram_gb': ram_gb, 'storage_gb': storage_gb, 'gpu_gb': gpu_gb})}"
-        except Exception as e:
-            return _compact_error("Failed to update admin compute defaults", e)
-
-
-    @mcp.tool()
-    async def admin_set_node_shared(node_id: str, is_shared: bool = True) -> str:
-        """Admin only: mark an existing node as shared PlugLayer compute or private."""
-        try:
-            data = await _client().patch(f"/v1/plugin/admin/nodes/{node_id}/sharing", {"is_shared": is_shared})
-            warning = f"\nWarning: {data['warning']}" if data.get("warning") else ""
-            return f"✅ Node `{node_id}` shared={data.get('is_shared', is_shared)}.{warning}"
-        except Exception as e:
-            return _compact_error("Failed to update node sharing", e)
-
-
-    @mcp.tool()
-    async def admin_add_shared_ssh_node(
-        name: str,
-        host: str,
-        ssh_private_key: str,
-        user: str = "root",
-        port: int = 22,
-    ) -> str:
-        """Admin only: add an SSH node as PlugLayer-owned shared compute for all users."""
-        if not name or not host or not ssh_private_key:
-            return "Missing required fields: name, host, and ssh_private_key are required."
-        try:
-            data = await _client().post("/v1/plugin/admin/nodes/ssh", {
-                "name": name,
-                "provider": "ssh",
-                "ssh_host": host,
-                "ssh_port": port,
-                "ssh_user": user,
-                "ssh_private_key": ssh_private_key,
-            })
-            task_id = data.get("task_id")
-            node = data.get("node", {})
-            return (
-                f"✅ Shared PlugLayer SSH node queued.\n"
-                f"Node: **{node.get('name', name)}** (id: `{node.get('id')}`)\n"
-                f"Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
-            )
-        except Exception as e:
-            return _compact_error("Failed to add shared SSH node", e)
