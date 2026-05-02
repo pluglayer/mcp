@@ -51,6 +51,12 @@ def register_identity_project_tools(mcp):
 
 
     @mcp.tool()
+    async def get_my_projects() -> str:
+        """Alias for list_projects() using end-user wording."""
+        return await list_projects()
+
+
+    @mcp.tool()
     async def create_project(name: str, description: str = "", domain_type: str = "pluglayer") -> str:
         """
         Create a PlugLayer project namespace. Project creation only requires authentication.
