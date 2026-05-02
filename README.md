@@ -100,18 +100,25 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 |------|-------------|
 | `get_current_user` | Show the Authentik-backed user and `roles` |
 | `list_projects` | List authenticated user's projects |
+| `get_my_projects` | Alias for listing the current user's projects |
 | `create_project` | Create a new project namespace |
 | `get_project` | Get project details |
 | `get_compute_summary` | Show account-level personal + shared compute capacity |
+| `get_my_available_compute` | Show the current user's available compute capacity |
+| `get_my_available_computes` | Alias for available compute capacity |
+| `estimate_compute` | Estimate required compute, monthly price, and a tailored offer link |
 | `list_nodes` | List accessible compute nodes |
 | `add_node_ssh` | Add a personal SSH node usable by all of the user's projects |
 | `list_registries` | List the registries currently available to the user |
 | `deploy_image` | Mirror a Docker image into PlugLayer's managed Docker Hub namespace, then deploy it after backend compute checks |
 | `deploy_compose` | Deploy from docker-compose.yml after backend compute checks |
 | `list_deployments` | List running apps/deployments |
+| `get_apps_by_project` | List apps inside a specific project |
 | `get_deployment_status` | Check app status and URL |
 | `get_logs` | Get app logs |
+| `get_app_logs` | Alias for getting app logs |
 | `redeploy` | Redeploy an app |
+| `restart_app` | Alias for restarting an app by redeploying it |
 | `rollback` | Roll back to previous version |
 | `delete_deployment` | Delete an app |
 | `list_project_domains` | List custom domains for a project |
