@@ -47,6 +47,25 @@ def register_deployment_tools(mcp):
             return _compact_error("Error listing apps", e)
 
     @mcp.tool()
+    async def get_apps_by_project(project_id: str) -> str:
+        """List apps for a specific project."""
+        try:
+            data = await _client().get(f"/v1/plugin/projects/{project_id}/apps")
+            apps = data.get("apps", [])
+            if not apps:
+                return f"No apps found in project `{project_id}` yet."
+            lines = [f"Apps in project `{project_id}`:\n"]
+            for app in apps:
+                status = app.get("status", "unknown")
+                lines.append(
+                    f"{_status_emoji(status)} **{app.get('name')}** (id: `{app.get('id')}`)\n"
+                    f"   Status: {status} | URL: {app.get('primary_url') or 'not yet available'}\n"
+                )
+            return "\n".join(lines)
+        except Exception as e:
+            return _compact_error("Error listing project apps", e)
+
+    @mcp.tool()
     async def deploy_image(
         project_id: str,
         name: str,
@@ -150,6 +169,11 @@ def register_deployment_tools(mcp):
             return _compact_error("Error getting logs", e)
 
     @mcp.tool()
+    async def get_app_logs(app_id: str, lines: int = 100) -> str:
+        """Alias for get_logs() using app terminology."""
+        return await get_logs(app_id, lines)
+
+    @mcp.tool()
     async def redeploy(deployment_id: str) -> str:
         """Redeploy an existing app."""
         try:
@@ -158,6 +182,16 @@ def register_deployment_tools(mcp):
             return f"🔄 Redeployment queued. Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
         except Exception as e:
             return _compact_error("Error triggering redeploy", e)
+
+    @mcp.tool()
+    async def restart_app(app_id: str) -> str:
+        """Restart an app by queueing a redeploy."""
+        try:
+            data = await _client().post(f"/v1/plugin/apps/{app_id}/restart")
+            task_id = data.get("task_id")
+            return f"🔄 App restart queued. Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
+        except Exception as e:
+            return _compact_error("Error restarting app", e)
 
     @mcp.tool()
     async def rollback(deployment_id: str, revision: int | None = None) -> str:
