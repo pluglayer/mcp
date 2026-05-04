@@ -81,7 +81,7 @@ def register_deployment_tools(mcp):
         push_to_pluglayer_registry: bool = True,
         registry_id: str = "",
     ) -> str:
-        """Deploy a Docker image into a project. By default, mirror it into PlugLayer's managed registry first."""
+        """Deploy a Docker image into a project. By default, mirror it into PlugLayer's managed registry first. If the user is deploying the current repo, build the image locally first and then call this tool with the built image reference."""
         try:
             compute = await _get_compute_summary()
             if not compute.get("can_deploy"):
@@ -114,6 +114,7 @@ def register_deployment_tools(mcp):
             lines = [f"🚀 App queued: **{name}** (id: `{app.get('id')}`). Task ID: `{task_id}`"]
             if mirrored:
                 lines.append(f"Mirrored image: `{mirrored}`")
+            lines.append("This usually takes around 10 minutes. Feel free to keep working and ask me to check status later.")
             lines.append(_fmt_task_hint(task_id))
             return "\n".join(lines)
         except Exception as e:
@@ -127,7 +128,7 @@ def register_deployment_tools(mcp):
         route_slug: str = "",
         compute_placement: str = "auto",
     ) -> str:
-        """Deploy docker-compose.yml into a project."""
+        """Deploy docker-compose.yml into a project. Use this when multiple services should run together."""
         try:
             compute = await _get_compute_summary()
             if not compute.get("can_deploy"):
@@ -140,7 +141,11 @@ def register_deployment_tools(mcp):
             })
             task_id = data.get("task_id")
             app = data.get("app", {})
-            return f"🚀 Compose app queued (id: `{app.get('id')}`). Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
+            return (
+                f"🚀 Compose app queued (id: `{app.get('id')}`). Task ID: `{task_id}`\n"
+                "This usually takes around 10 minutes. Feel free to keep working and ask me to check status later.\n"
+                f"{_fmt_task_hint(task_id)}"
+            )
         except Exception as e:
             return _compact_error("Compose deployment failed", e)
 
