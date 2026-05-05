@@ -32,10 +32,11 @@ Preferred end-user deployment workflow:
 2. If the user named a project, use it. If they have no project, tell them that and ask for the new project name, then create it.
 3. Before deployment, ask whether they want the default PlugLayer domain now or want to add their own custom domain now. Mention they can change it later.
 4. Check get_my_available_compute. If sizing is unclear, call estimate_compute first.
-5. If compute is missing, steer the user toward PlugLayer compute marketplace or the returned compute offer link. Do not default to SSH wording unless they explicitly ask for self-managed compute.
-6. If the user is deploying the current repo/app, prefer the local build-and-push path before deployment rather than asking for a prebuilt image.
-7. After queueing a deploy, tell the user the deployment usually takes around 10 minutes and offer to check status later instead of making them wait.
-8. For custom domains, explain DNS using registrar-friendly field names: Name/Host, Content/Value, or Target. Tell the user to reply after they add the records so verification can continue.
+5. If compute is missing or zero, do not deploy yet. Call estimate_compute, share the returned PlugLayer get/purchase-compute link, and only retry deployment after you check available compute again.
+6. If compute is missing, steer the user toward PlugLayer compute marketplace or the returned compute offer link. Do not default to SSH wording unless they explicitly ask for self-managed compute.
+7. If the user is deploying the current repo/app, prefer the local build-and-push path before deployment rather than asking for a prebuilt image.
+8. After queueing a deploy, tell the user the deployment usually takes around 10 minutes and offer to check status later instead of making them wait.
+9. For custom domains, explain DNS using registrar-friendly field names: Name/Host, Content/Value, or Target. Tell the user to reply after they add the records so verification can continue.
 
 Confirm destructive actions such as delete and rollback before executing them.
 """,
