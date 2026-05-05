@@ -3,6 +3,18 @@
 from pluglayer_mcp.tools.shared import _client, _compact_error, _fmt_task_hint, _status_emoji
 
 
+def _domain_line(domain: dict) -> str:
+    hostname = domain.get("domain") or "unknown-domain"
+    status = domain.get("status", "unknown")
+    mode = domain.get("mode", "single")
+    app_id = domain.get("app_id") or "unattached"
+    dns = domain.get("dns") or {}
+    verified = "yes" if dns.get("verified") else "no"
+    return (
+        f"- **{hostname}** — status: {status} | mode: {mode} | attached app: `{app_id}` | DNS verified: {verified}"
+    )
+
+
 def register_identity_project_tools(mcp):
     # ── Identity / roles ─────────────────────────────────────────────────────────
 
@@ -87,15 +99,32 @@ def register_identity_project_tools(mcp):
         try:
             p = await _client().get(f"/v1/plugin/projects/{project_id}")
             p = p.get("project", p)
+            domains_payload = await _client().get(f"/v1/plugin/projects/{project_id}/domains")
+            domains = domains_payload.get("domains", [])
             status = p.get("status", "unknown")
-            return (
+            lines = [
                 f"{_status_emoji(status)} **{p.get('name')}**\n"
                 f"ID: `{p.get('id')}`\n"
                 f"Status: {status}\n"
                 f"Namespace: `{p.get('namespace')}`\n"
                 f"URL pattern: {p.get('base_url', 'N/A')}\n"
-                f"Apps: {p.get('deployment_count', 0)}\n"
-                "Compute is account-level; use get_compute_summary() for available capacity."
-            )
+                f"Apps: {p.get('deployment_count', 0)}"
+            ]
+            if domains:
+                lines.append("\n🌐 **Domains**")
+                lines.extend(_domain_line(domain) for domain in domains)
+                has_ready_domain = any(domain.get("status") in {"verified", "active"} for domain in domains)
+                if has_ready_domain:
+                    lines.append(
+                        "\nAt least one custom domain is already verified or active, so the user usually does not need to go through domain configuration again unless they want to change domains."
+                    )
+                else:
+                    lines.append(
+                        "\nCustom domain records exist, but they are not ready yet. Check the listed status before asking the user to change DNS again."
+                    )
+            else:
+                lines.append("\nNo custom domains are attached to this project yet.")
+            lines.append("\nCompute is account-level; use get_compute_summary() for available capacity.")
+            return "\n".join(lines)
         except Exception as e:
             return _compact_error("Error getting project", e)
