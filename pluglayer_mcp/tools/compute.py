@@ -1,6 +1,31 @@
 """Compute MCP tools."""
 
+from typing import Any
+
 from pluglayer_mcp.tools.shared import _client, _compact_error, _fmt_compute, _fmt_node, _fmt_task_hint, _get_compute_summary
+
+
+def _compute_value(compute: dict[str, Any] | None, key: str) -> float:
+    try:
+        return float((compute or {}).get(key, 0) or 0)
+    except Exception:
+        return 0.0
+
+
+def _compute_int_value(compute: dict[str, Any] | None, key: str) -> int:
+    try:
+        return int(float((compute or {}).get(key, 0) or 0))
+    except Exception:
+        return 0
+
+
+def _fmt_usage_over_allocated(used: dict[str, Any] | None, allocated: dict[str, Any] | None) -> str:
+    return (
+        f"{_compute_value(used, 'cpu_cores')}/{_compute_value(allocated, 'cpu_cores')} CPU, "
+        f"{_compute_value(used, 'ram_gb')}/{_compute_value(allocated, 'ram_gb')}GB RAM, "
+        f"{_compute_int_value(used, 'storage_gb')}/{_compute_int_value(allocated, 'storage_gb')}GB disk, "
+        f"{_compute_value(used, 'gpu_gb')}/{_compute_value(allocated, 'gpu_gb')}GB GPU"
+    )
 
 
 def _fmt_catalog_node(node: dict) -> str:
@@ -35,9 +60,19 @@ def register_compute_tools(mcp):
                 f"Accessible nodes: {counts.get('accessible', 0)} total, {counts.get('ready', 0)} ready",
                 f"Personal nodes: {counts.get('personal', 0)} total, {counts.get('personal_ready', 0)} ready",
                 f"PlugLayer shared nodes: {counts.get('pluglayer', 0)} total, {counts.get('pluglayer_ready', 0)} ready",
-                f"Total ready compute: {_fmt_compute(data.get('total_compute'))}",
-                f"Personal ready compute: {_fmt_compute(data.get('personal_compute'))}",
-                f"Shared ready compute: {_fmt_compute(data.get('pluglayer_compute'))}",
+                f"Total available compute: {_fmt_compute(data.get('available_compute'))}",
+                f"Total allocated compute: {_fmt_compute(data.get('allocated_compute'))}",
+                f"Total used compute: {_fmt_compute(data.get('used_compute'))}",
+                (
+                    "PlugLayer shared compute usage: "
+                    f"{_fmt_usage_over_allocated(data.get('used_shared_compute'), data.get('shared_reserved_compute'))}"
+                ),
+                f"PlugLayer shared compute available: {_fmt_compute(data.get('available_shared_compute'))}",
+                (
+                    "Personal compute usage: "
+                    f"{_fmt_usage_over_allocated(data.get('used_personal_compute'), data.get('personal_capacity_compute'))}"
+                ),
+                f"Personal compute available: {_fmt_compute(data.get('available_personal_compute'))}",
             ]
             purchase = data.get("purchase") or {}
             if purchase.get("message"):
