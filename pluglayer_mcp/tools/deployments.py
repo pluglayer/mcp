@@ -77,7 +77,7 @@ def register_deployment_tools(mcp):
         route_slug: str = "",
         cpu_limit: str = "500m",
         memory_limit: str = "512Mi",
-        compute_placement: str = "auto",
+        compute_placement: str = "personal",
         push_to_pluglayer_registry: bool = True,
         registry_id: str = "",
     ) -> str:
@@ -126,7 +126,7 @@ def register_deployment_tools(mcp):
         compose_yaml: str,
         app_name: str = "",
         route_slug: str = "",
-        compute_placement: str = "auto",
+        compute_placement: str = "personal",
     ) -> str:
         """Deploy docker-compose.yml into a project. Use this when multiple services should run together."""
         try:
