@@ -110,10 +110,10 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | `list_nodes` | List accessible compute nodes |
 | `add_node_ssh` | Add a personal SSH node usable by all of the user's projects |
 | `list_registries` | List the registries currently available to the user |
-| `deploy_image` | Mirror a Docker image into PlugLayer's managed Docker Hub namespace, then deploy it after backend compute checks |
-| `deploy_compose` | Deploy from docker-compose.yml after backend compute checks |
+| `deploy_image` | Mirror a Docker image into PlugLayer's managed Docker Hub namespace, then deploy it after backend compute checks; if a similar app already exists and the namespace is full, use update/replace flow instead of a brand-new app |
+| `deploy_compose` | Deploy from docker-compose.yml after backend compute checks; if a similar app already exists and the namespace is full, use update/replace flow instead of a brand-new app |
 | `list_deployments` | List running apps/deployments |
-| `get_apps_by_project` | List apps inside a specific project; use this before deploy when you need to clarify update vs replace vs separate new app |
+| `get_apps_by_project` | List apps inside a specific project; use this before deploy when you need to clarify update vs replace vs separate new app, especially when a full namespace should block duplicate new-app deploys |
 | `get_deployment_status` | Check app status and URL |
 | `get_logs` | Get app logs |
 | `get_app_logs` | Alias for getting app logs |

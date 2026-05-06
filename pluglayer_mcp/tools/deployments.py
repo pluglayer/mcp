@@ -51,7 +51,7 @@ def register_deployment_tools(mcp):
 
     @mcp.tool()
     async def get_apps_by_project(project_id: str) -> str:
-        """List apps for a specific project. Use this before a new deploy when the project may already contain the same app and you need to clarify update vs replace vs separate new app."""
+        """List apps for a specific project. Use this before a new deploy when the project may already contain the same app and you need to clarify update vs replace vs separate new app. If the project already has a similar app and the namespace is full, prefer update or replace flow instead of a brand-new app."""
         try:
             data = await _client().get(f"/v1/plugin/projects/{project_id}/apps")
             apps = data.get("apps", [])
@@ -84,7 +84,7 @@ def register_deployment_tools(mcp):
         push_to_pluglayer_registry: bool = True,
         registry_id: str = "",
     ) -> str:
-        """Deploy a pullable Docker image into a project. Before using this in a project that already has apps, clarify whether the user wants to update an existing app, replace it, or add a separate new app. By default, mirror it into PlugLayer's managed registry first. For a local-only image built on the user's machine, use upload_image_archive_and_deploy() instead."""
+        """Deploy a pullable Docker image into a project. Before using this in a project that already has apps, clarify whether the user wants to update an existing app, replace it, or add a separate new app. If the project namespace already looks occupied or quota-limited, refuse the separate new-app path by default and steer into update/replace flow first. By default, mirror it into PlugLayer's managed registry first. For a local-only image built on the user's machine, use upload_image_archive_and_deploy() instead."""
         try:
             compute = await _get_compute_summary()
             if not compute.get("can_deploy"):
@@ -138,7 +138,7 @@ def register_deployment_tools(mcp):
         compute_placement: str = "personal",
         registry_id: str = "",
     ) -> str:
-        """Upload a locally built Docker image archive (for example from `docker save`) to PlugLayer, push it into the configured registry, and deploy from the mirrored image. Before using this in a project that already has apps, clarify whether the user wants to update an existing app, replace it, or add a separate new app."""
+        """Upload a locally built Docker image archive (for example from `docker save`) to PlugLayer, push it into the configured registry, and deploy from the mirrored image. Before using this in a project that already has apps, clarify whether the user wants to update an existing app, replace it, or add a separate new app. If the project namespace already looks occupied or quota-limited, refuse the separate new-app path by default and steer into update/replace flow first."""
         try:
             if not os.path.exists(image_archive_path):
                 return f"Image archive not found: {image_archive_path}"
@@ -184,7 +184,7 @@ def register_deployment_tools(mcp):
         route_slug: str = "",
         compute_placement: str = "personal",
     ) -> str:
-        """Deploy docker-compose.yml into a project. Use this when multiple services should run together. Before using this in a project that already has apps, clarify whether the user wants to update an existing app, replace it, or add a separate new app."""
+        """Deploy docker-compose.yml into a project. Use this when multiple services should run together. Before using this in a project that already has apps, clarify whether the user wants to update an existing app, replace it, or add a separate new app. If the project namespace already looks occupied or quota-limited, refuse the separate new-app path by default and steer into update/replace flow first."""
         try:
             compute = await _get_compute_summary()
             if not compute.get("can_deploy"):
