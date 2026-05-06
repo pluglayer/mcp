@@ -54,6 +54,43 @@ class PlugLayerClient:
     async def put(self, path: str, data: dict) -> Any:
         return await self._request("PUT", path, data=data, timeout=30.0)
 
+    async def post_multipart(
+        self,
+        path: str,
+        *,
+        form_data: dict[str, Any],
+        file_field: str,
+        file_path: str,
+        content_type: str = "application/octet-stream",
+        timeout: float = 600.0,
+    ) -> Any:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "User-Agent": "pluglayer-mcp/0.1.0",
+        }
+        with open(file_path, "rb") as fh:
+            files = {
+                file_field: (file_path.split("/")[-1], fh, content_type),
+            }
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.post(
+                    f"{self.base_url}{path}",
+                    headers=headers,
+                    data=form_data,
+                    files=files,
+                )
+                try:
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    detail = resp.text[:500]
+                    raise RuntimeError(f"{resp.status_code} {resp.reason_phrase}: {detail}") from exc
+                if resp.status_code == 204 or not resp.content:
+                    return {}
+                data = resp.json()
+                if isinstance(data, dict) and data.get("ok") is True and "data" in data:
+                    return data["data"]
+                return data
+
 
 def get_client(api_key: Optional[str] = None) -> PlugLayerClient:
     return PlugLayerClient(api_key=api_key)

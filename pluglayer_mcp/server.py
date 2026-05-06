@@ -34,7 +34,7 @@ Preferred end-user deployment workflow:
 4. Check get_my_available_compute. If sizing is unclear, call estimate_compute first.
 5. If compute is missing or zero, do not deploy yet. Call estimate_compute, share the returned PlugLayer get/purchase-compute link, and only retry deployment after you check available compute again.
 6. If compute is missing, steer the user toward PlugLayer compute marketplace or the returned compute offer link. Do not default to SSH wording unless they explicitly ask for self-managed compute.
-7. If the user is deploying the current repo/app, prefer the local build-and-push path before deployment rather than asking for a prebuilt image.
+7. If the user is deploying the current repo/app, prefer the local build path first. If the built image is only local to the user's machine, export it with `docker save` and use the uploaded-image deploy path; use plain deploy_image only for source images that are already pullable from a registry.
 8. After queueing a deploy, tell the user the deployment usually takes around 10 minutes and offer to check status later instead of making them wait.
 9. For custom domains, explain DNS using registrar-friendly field names: Name/Host, Content/Value, or Target. Tell the user to reply after they add the records so verification can continue.
 

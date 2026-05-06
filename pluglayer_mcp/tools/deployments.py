@@ -1,5 +1,8 @@
 """Deployment/app MCP tools backed by PlugLayer v1 apps API."""
 
+import json
+import os
+
 from pluglayer_mcp.tools.shared import _client, _compact_error, _fmt_task_hint, _get_compute_summary, _status_emoji
 
 
@@ -81,7 +84,7 @@ def register_deployment_tools(mcp):
         push_to_pluglayer_registry: bool = True,
         registry_id: str = "",
     ) -> str:
-        """Deploy a Docker image into a project. By default, mirror it into PlugLayer's managed registry first. If the user is deploying the current repo, build the image locally first and then call this tool with the built image reference."""
+        """Deploy a pullable Docker image into a project. By default, mirror it into PlugLayer's managed registry first. For a local-only image built on the user's machine, use upload_image_archive_and_deploy() instead."""
         try:
             compute = await _get_compute_summary()
             if not compute.get("can_deploy"):
@@ -119,6 +122,59 @@ def register_deployment_tools(mcp):
             return "\n".join(lines)
         except Exception as e:
             return _compact_error("Deployment failed", e)
+
+    @mcp.tool()
+    async def upload_image_archive_and_deploy(
+        project_id: str,
+        name: str,
+        image_archive_path: str,
+        tag: str = "latest",
+        ports: list[int] | None = None,
+        env_vars: dict[str, str] | None = None,
+        replicas: int = 1,
+        route_slug: str = "",
+        cpu_limit: str = "500m",
+        memory_limit: str = "512Mi",
+        compute_placement: str = "personal",
+        registry_id: str = "",
+    ) -> str:
+        """Upload a locally built Docker image archive (for example from `docker save`) to PlugLayer, push it into the configured registry, and deploy from the mirrored image."""
+        try:
+            if not os.path.exists(image_archive_path):
+                return f"Image archive not found: {image_archive_path}"
+            compute = await _get_compute_summary()
+            if not compute.get("can_deploy"):
+                return f"Cannot deploy yet: {compute.get('message')}"
+            form_data = {
+                "name": name,
+                "tag": tag,
+                "route_slug": route_slug or "",
+                "compute_placement": compute_placement,
+                "registry_id": registry_id or "",
+                "ports_json": json.dumps(ports or []),
+                "env_vars_json": json.dumps(env_vars or {}),
+                "replicas": str(replicas),
+                "cpu_limit": cpu_limit,
+                "memory_limit": memory_limit,
+            }
+            data = await _client().post_multipart(
+                f"/v1/plugin/projects/{project_id}/apps/upload-image",
+                form_data=form_data,
+                file_field="archive",
+                file_path=image_archive_path,
+                content_type="application/x-tar",
+            )
+            task_id = data.get("task_id")
+            app = data.get("app", {})
+            mirrored = data.get("mirrored_image")
+            lines = [f"🚀 Uploaded image app queued: **{name}** (id: `{app.get('id')}`). Task ID: `{task_id}`"]
+            if mirrored:
+                lines.append(f"Mirrored image: `{mirrored}`")
+            lines.append("This usually takes around 10 minutes. Feel free to keep working and ask me to check status later.")
+            lines.append(_fmt_task_hint(task_id))
+            return "\n".join(lines)
+        except Exception as e:
+            return _compact_error("Uploaded image deployment failed", e)
 
     @mcp.tool()
     async def deploy_compose(
