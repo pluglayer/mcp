@@ -30,13 +30,15 @@ Current PlugLayer rules:
 Preferred end-user deployment workflow:
 1. Run get_current_user and list_projects.
 2. If the user named a project, use it. If they have no project, tell them that and ask for the new project name, then create it.
-3. Before deployment, ask whether they want the default PlugLayer domain now or want to add their own custom domain now. Mention they can change it later.
+3. Before deployment, list the domains already attached to that project. When asking the domain question, include any existing project domains as options alongside the default PlugLayer domain and adding a new custom domain. Mention they can change it later.
 4. Check get_my_available_compute. If sizing is unclear, call estimate_compute first.
-5. If compute is missing or zero, do not deploy yet. Call estimate_compute, share the returned PlugLayer get/purchase-compute link, and only retry deployment after you check available compute again.
+5. If compute is missing or zero, do not deploy yet. Call estimate_compute, offer PlugLayer compute, share the returned PlugLayer get/purchase-compute link, and only retry deployment after you check available compute again.
 6. If compute is missing, steer the user toward PlugLayer compute marketplace or the returned compute offer link. Do not default to SSH wording unless they explicitly ask for self-managed compute.
-7. If the user is deploying the current repo/app, prefer the local build path first. If the built image is only local to the user's machine, export it with `docker save` and use the uploaded-image deploy path; use plain deploy_image only for source images that are already pullable from a registry.
-8. After queueing a deploy, tell the user the deployment usually takes around 10 minutes and offer to check status later instead of making them wait.
-9. For custom domains, explain DNS using registrar-friendly field names: Name/Host, Content/Value, or Target. Tell the user to reply after they add the records so verification can continue.
+7. Before deploying into an existing project, inspect that project's current apps. If it already contains a likely matching app, ask the user whether they want to update the existing app, replace it, or add a separate new app.
+8. If the user wants to update an existing app, prefer redeploying/updating that app instead of creating a duplicate app in the same project. If they want a replacement, confirm that the older app may need to be deleted to free quota and avoid confusion.
+9. If the user is deploying the current repo/app, prefer the local build path first. If the built image is only local to the user's machine, export it with `docker save` and use the uploaded-image deploy path; use plain deploy_image only for source images that are already pullable from a registry.
+10. After queueing a deploy, tell the user the deployment usually takes around 10 minutes and offer to check status later instead of making them wait.
+11. For custom domains, explain DNS using registrar-friendly field names: Name/Host, Content/Value, or Target. Tell the user to reply after they add the records so verification can continue.
 
 Confirm destructive actions such as delete and rollback before executing them.
 """,

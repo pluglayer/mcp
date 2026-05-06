@@ -65,6 +65,11 @@ def register_domain_tools(mcp):
             return _compact_error("Error listing domains", e)
 
     @mcp.tool()
+    async def get_domains_by_project(project_id: str) -> str:
+        """Alias for list_project_domains() using project-first wording. Use this before asking the user which domain they want so existing project domains can be offered as options."""
+        return await list_project_domains(project_id)
+
+    @mcp.tool()
     async def add_custom_domain(project_id: str, domain: str, mode: str = "single", app_id: str = "") -> str:
         """Add a custom domain. mode is 'single' or 'wildcard'. The result explains the exact TXT/CNAME fields to enter in DNS."""
         try:

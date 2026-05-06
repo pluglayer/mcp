@@ -102,7 +102,7 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | `list_projects` | List authenticated user's projects |
 | `get_my_projects` | Alias for listing the current user's projects |
 | `create_project` | Create a new project namespace |
-| `get_project` | Get project details |
+| `get_project` | Get project details, current apps in the project, and attached custom-domain state |
 | `get_compute_summary` | Show account-level personal + shared compute capacity; estimate first when sizing is still unclear |
 | `get_my_available_compute` | Show the current user's available compute capacity; pair with estimate first for planning |
 | `get_my_available_computes` | Alias for available compute capacity |
@@ -113,7 +113,7 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | `deploy_image` | Mirror a Docker image into PlugLayer's managed Docker Hub namespace, then deploy it after backend compute checks |
 | `deploy_compose` | Deploy from docker-compose.yml after backend compute checks |
 | `list_deployments` | List running apps/deployments |
-| `get_apps_by_project` | List apps inside a specific project |
+| `get_apps_by_project` | List apps inside a specific project; use this before deploy when you need to clarify update vs replace vs separate new app |
 | `get_deployment_status` | Check app status and URL |
 | `get_logs` | Get app logs |
 | `get_app_logs` | Alias for getting app logs |
@@ -122,6 +122,7 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | `rollback` | Roll back to previous version |
 | `delete_deployment` | Delete an app |
 | `list_project_domains` | List custom domains for a project |
+| `get_domains_by_project` | Alias for project-domain lookup; use this before asking which domain the user wants so existing project domains can be offered as options |
 | `add_custom_domain` | Add a single or wildcard custom domain and return DNS records |
 | `verify_custom_domain` | Verify TXT/CNAME DNS and activate if attached |
 | `attach_custom_domain` | Attach a verified custom domain to an app |

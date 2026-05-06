@@ -99,6 +99,8 @@ def register_identity_project_tools(mcp):
         try:
             p = await _client().get(f"/v1/plugin/projects/{project_id}")
             p = p.get("project", p)
+            apps_payload = await _client().get(f"/v1/plugin/projects/{project_id}/apps")
+            apps = apps_payload.get("apps", [])
             domains_payload = await _client().get(f"/v1/plugin/projects/{project_id}/domains")
             domains = domains_payload.get("domains", [])
             status = p.get("status", "unknown")
@@ -110,6 +112,18 @@ def register_identity_project_tools(mcp):
                 f"URL pattern: {p.get('base_url', 'N/A')}\n"
                 f"Apps: {p.get('deployment_count', 0)}"
             ]
+            if apps:
+                lines.append("\n📦 **Existing Apps**")
+                for app in apps:
+                    app_status = app.get("status", "unknown")
+                    lines.append(
+                        f"- {_status_emoji(app_status)} **{app.get('name')}** (`{app.get('id')}`) — status: {app_status} | URL: {app.get('primary_url') or 'not yet available'}"
+                    )
+                lines.append(
+                    "\nBefore deploying another app into this project, check whether the user means to update one of these apps, replace one of them, or add a separate new app."
+                )
+            else:
+                lines.append("\nNo apps are deployed in this project yet.")
             if domains:
                 lines.append("\n🌐 **Domains**")
                 lines.extend(_domain_line(domain) for domain in domains)
