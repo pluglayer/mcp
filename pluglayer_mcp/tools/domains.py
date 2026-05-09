@@ -1,9 +1,37 @@
 """Custom-domain MCP tools backed by PlugLayer v1 domain APIs."""
 
+from pluglayer_mcp.domain_provider import detect_domain_provider
 from pluglayer_mcp.tools.shared import _client, _compact_error, _status_emoji
 
 
-def _domain_dns_help(domain: dict) -> str:
+def _provider_notes(provider_name: str | None) -> list[str]:
+    provider = (provider_name or "").strip().lower()
+    notes = {
+        "cloudflare": [
+            "Turn off proxying for the first verification pass if PlugLayer cannot see the route record yet.",
+            "Cloudflare may show the root record as `@` instead of the full domain.",
+        ],
+        "godaddy": [
+            "GoDaddy often wants the left-hand side as `@` for root and `www` for a subdomain.",
+            "Use the exact TXT host shown by PlugLayer; do not paste the TXT value into the host field.",
+        ],
+        "namecheap": [
+            "Namecheap typically uses `Host` and `Value` fields and may abbreviate the root as `@`.",
+            "Keep TTL on automatic/default unless you have a specific reason to change it.",
+        ],
+        "squarespace": [
+            "Squarespace DNS may take a little longer to surface TXT changes than some providers.",
+            "Use `@` for the root if Squarespace does not accept the full hostname.",
+        ],
+        "google cloud dns": [
+            "Google DNS accepts fully qualified names cleanly; trailing dots are okay but not required in most UIs.",
+            "Make sure you are editing the authoritative zone for this exact domain.",
+        ],
+    }
+    return notes.get(provider, ["Double-check whether the provider expects `@` for the root record."])
+
+
+def _markdown_dns_table(domain: dict, provider_name: str | None = None) -> str:
     verification = domain.get("verification") or {}
     dns = domain.get("dns") or {}
     txt_name = verification.get("name") or "_pluglayer-verify.example.com"
@@ -11,27 +39,23 @@ def _domain_dns_help(domain: dict) -> str:
     expected_type = dns.get("expected_type") or "CNAME"
     expected_value = dns.get("expected_value") or "cname.apps.pluglayer.io"
     domain_name = domain.get("domain") or "example.com"
-
-    dns_lines = [
-        "Add these DNS records in your registrar or DNS provider:",
-        "",
-        f"- TXT",
-        f"  Name / Host: `{txt_name}`",
-        f"  Content / Value: `{txt_value}`",
-        "",
-        f"- {expected_type}",
-        f"  Name / Host: `{domain_name}`" if expected_type == "CNAME" else f"  Name / Host: `{domain_name}`",
-        f"  Target / Value: `{expected_value}`",
-        "",
-        "Provider wording varies:",
-        "- Some providers say `Name` instead of `Host`.",
-        "- Some providers say `Content` instead of `Value`.",
-        "- CNAME records may use `Target` instead of `Value`.",
-        "- Root domains may appear as `@` instead of the full domain.",
-        "",
-        "After you add the records, tell me `I've added the DNS records` and I can run verification for you.",
+    records = [
+        ("TXT", txt_name, txt_value, "Ownership verification"),
+        (expected_type, domain_name, expected_value, "Traffic routing to your app"),
     ]
-    return "\n".join(dns_lines)
+    lines = [
+        "| Type | Name / Host | Content / Value / Target | Description |",
+        "| --- | --- | --- | --- |",
+    ]
+    lines.extend(f"| {rtype} | `{name}` | `{value}` | {desc or '-'} |" for rtype, name, value, desc in records)
+    if provider_name:
+        lines.append(f"\nDetected provider: **{provider_name}**")
+        for note in _provider_notes(provider_name):
+            lines.append(f"- {note}")
+    else:
+        lines.append("\nProvider not confirmed yet.")
+    lines.append("\nAfter you add the records, tell me you've added them and I can verify and continue.")
+    return "\n".join(lines)
 
 
 def _fmt_domain(domain: dict) -> str:
@@ -70,8 +94,31 @@ def register_domain_tools(mcp):
         return await list_project_domains(project_id)
 
     @mcp.tool()
-    async def add_custom_domain(project_id: str, domain: str, mode: str = "single", app_id: str = "") -> str:
-        """Add a custom domain. mode is 'single' or 'wildcard'. The result explains the exact TXT/CNAME fields to enter in DNS."""
+    async def detect_custom_domain_provider(domain: str) -> str:
+        """Detect the likely DNS/domain provider for a custom domain from public NS records so the agent can confirm it with the user before showing tailored DNS steps."""
+        try:
+            result = detect_domain_provider(domain)
+            if result.provider:
+                lines = [
+                    f"Likely DNS provider for **{domain}**: **{result.provider}**",
+                    f"Confidence: {result.confidence}",
+                ]
+                if result.nameservers:
+                    lines.append(f"Nameservers: {', '.join(result.nameservers)}")
+                lines.append("Please confirm this provider with the user before giving final DNS click-by-click instructions.")
+                return "\n".join(lines)
+            options = ", ".join(result.suggestions) if result.suggestions else "Cloudflare, GoDaddy, Namecheap, Squarespace"
+            return (
+                f"I could not confidently detect the DNS provider for **{domain}**.\n"
+                f"Offer the user these options: {options}, or let them write their own provider name.\n"
+                "Once they confirm the provider, show the DNS record table tailored to that provider."
+            )
+        except Exception as e:
+            return _compact_error("Error detecting domain provider", e)
+
+    @mcp.tool()
+    async def add_custom_domain(project_id: str, domain: str, mode: str = "single", app_id: str = "", provider_name: str = "") -> str:
+        """Add a custom domain. Confirm whether the user wants this custom domain or the default pluglayer.io subdomain first. After the provider is known, use provider_name to tailor the DNS instructions."""
         try:
             data = await _client().post(
                 f"/v1/plugin/projects/{project_id}/domains",
@@ -85,7 +132,7 @@ def register_domain_tools(mcp):
             return (
                 "Custom domain added.\n\n"
                 f"{_fmt_domain(item)}\n\n"
-                f"{_domain_dns_help(item)}"
+                f"{_markdown_dns_table(item, provider_name or None)}"
             )
         except Exception as e:
             return _compact_error("Error adding domain", e)
@@ -100,16 +147,14 @@ def register_domain_tools(mcp):
             if status == "active":
                 extra = "The domain is verified and active."
             elif status == "verified":
-                extra = "The domain is verified. If it is attached to an app, PlugLayer should activate routing shortly."
+                extra = "The domain is verified. If it is attached to an app, routing should activate shortly."
             elif status == "waiting_dns":
                 extra = (
-                    "The TXT record looks good, but the main route record is still not visible the way PlugLayer expects. "
-                    "Double-check the CNAME / target field and whether the DNS provider is flattening or proxying the record."
+                    "The TXT record looks good, but the traffic record is still not visible the way PlugLayer expects. "
+                    "Double-check the Name / Host and Content / Value / Target fields exactly."
                 )
             else:
-                extra = (
-                    "PlugLayer still cannot verify the DNS records. Double-check the Name/Host and Content/Value fields exactly as shown."
-                )
+                extra = "PlugLayer still cannot verify the DNS records. Recheck the table values and provider-specific notes."
             return f"{_fmt_domain(domain)}\n\n{extra}"
         except Exception as e:
             return _compact_error("Error verifying domain", e)
@@ -127,7 +172,7 @@ def register_domain_tools(mcp):
             )
             return (
                 f"{_fmt_domain(data.get('domain', {}))}\n\n"
-                "If DNS is already verified, PlugLayer will route traffic directly to the app. "
+                "If DNS is already verified, traffic will route directly to the user's deployed app. "
                 "If not, add the DNS records first and then run verify_custom_domain()."
             )
         except Exception as e:
@@ -144,7 +189,7 @@ def register_domain_tools(mcp):
 
     @mcp.tool()
     async def remove_custom_domain(domain_id: str) -> str:
-        """Remove a custom domain and its Traefik route."""
+        """Remove a custom domain and its route."""
         try:
             await _client().delete(f"/v1/plugin/domains/{domain_id}")
             return f"Custom domain `{domain_id}` removed."
@@ -153,13 +198,13 @@ def register_domain_tools(mcp):
 
     @mcp.tool()
     async def update_app_domain(app_id: str, route_slug: str) -> str:
-        """Update the app's default PlugLayer route slug. Use this when the user wants to change the built-in pluglayer.io-style app URL; custom domains use the domain tools instead."""
+        """Update the app's default pluglayer.io route slug. Use this when the user chooses the built-in subdomain now and may switch to a custom domain later."""
         try:
             data = await _client().patch(f"/v1/plugin/apps/{app_id}", {"route_slug": route_slug})
             app = data.get("app", {})
             task_id = data.get("task_id")
             return (
-                f"Default PlugLayer domain updated for **{app.get('name', app_id)}**.\n"
+                f"Default app subdomain updated for **{app.get('name', app_id)}**.\n"
                 f"New route slug: `{app.get('route_slug', route_slug)}`\n"
                 f"Task ID: `{task_id}`\n"
                 "This redeploy can take around 10 minutes. Feel free to keep working and ask me to check status later."

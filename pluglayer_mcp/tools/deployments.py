@@ -34,7 +34,7 @@ def register_deployment_tools(mcp):
             data = await _client().get("/v1/plugin/apps", params=params)
             apps = data.get("apps", [])
             if not apps:
-                return "No apps found. Deploy one with deploy_image() or deploy_compose()."
+                return "No apps found. Deploy one with deploy_image(), upload_image_archive_and_deploy(), or deploy_compose()."
             lines = ["Your apps:\n"]
             for app in apps:
                 status = app.get("status", "unknown")
@@ -84,7 +84,7 @@ def register_deployment_tools(mcp):
         push_to_pluglayer_registry: bool = True,
         registry_id: str = "",
     ) -> str:
-        """Deploy a pullable Docker image into a project. Before using this in a project that already has apps, clarify whether the user wants to update an existing app, replace it, or add a separate new app. If the project namespace already looks occupied or quota-limited, refuse the separate new-app path by default and steer into update/replace flow first. By default, mirror it into PlugLayer's managed registry first. For a local-only image built on the user's machine, use upload_image_archive_and_deploy() instead."""
+        """Deploy a pullable Docker image into a project. Before using this in a project that already has apps, clarify whether the user wants to update an existing app, replace it, or add a separate new app. If the project namespace already looks occupied or quota-limited, refuse the separate new-app path by default and steer into update/replace flow first. By default, mirror it into an allowed managed registry first. For a local-only image built on the user's machine, use upload_image_archive_and_deploy() instead."""
         try:
             compute = await _get_compute_summary()
             if not compute.get("can_deploy"):
@@ -138,7 +138,7 @@ def register_deployment_tools(mcp):
         compute_placement: str = "personal",
         registry_id: str = "",
     ) -> str:
-        """Upload a locally built Docker image archive (for example from `docker save`) to PlugLayer, push it into the configured registry, and deploy from the mirrored image. Before using this in a project that already has apps, clarify whether the user wants to update an existing app, replace it, or add a separate new app. If the project namespace already looks occupied or quota-limited, refuse the separate new-app path by default and steer into update/replace flow first."""
+        """Upload a locally built Docker image archive (for example from `docker save`) to PlugLayer, push it into an allowed configured registry, and deploy from the mirrored image. Before using this in a project that already has apps, clarify whether the user wants to update an existing app, replace it, or add a separate new app. If the project namespace already looks occupied or quota-limited, refuse the separate new-app path by default and steer into update/replace flow first."""
         try:
             if not os.path.exists(image_archive_path):
                 return f"Image archive not found: {image_archive_path}"
@@ -235,12 +235,37 @@ def register_deployment_tools(mcp):
         return await get_logs(app_id, lines)
 
     @mcp.tool()
-    async def redeploy(deployment_id: str) -> str:
-        """Redeploy an existing app."""
+    async def exec_app_terminal(app_id: str, command: str, timeout_seconds: int = 20) -> str:
+        """Run a shell command inside the user's own deployed app container and return the result. This is limited to the caller's app pod only."""
         try:
+            data = await _client().post(
+                f"/v1/plugin/apps/{app_id}/terminal",
+                {"command": command, "timeout_seconds": timeout_seconds},
+            )
+            return (
+                f"🖥️ **App Terminal**\n"
+                f"App: `{data.get('app_name')}` (`{data.get('app_id')}`)\n"
+                f"Pod: `{data.get('pod_name')}` | Container: `{data.get('container_name')}`\n\n"
+                f"```sh\n{data.get('output', '')}\n```"
+            )
+        except Exception as e:
+            return _compact_error("Error executing app terminal command", e)
+
+    @mcp.tool()
+    async def redeploy(deployment_id: str, confirmed_app_name: str) -> str:
+        """Redeploy an existing app. Confirm the exact app name with the user first and pass it here."""
+        try:
+            app_data = await _client().get(f"/v1/plugin/apps/{deployment_id}")
+            app = app_data.get("app", {})
+            actual_name = app.get("name") or ""
+            if confirmed_app_name.strip() != actual_name:
+                return (
+                    f"Redeploy blocked. The confirmed app name `{confirmed_app_name}` does not match the actual app name `{actual_name}`.\n"
+                    "Ask the user to confirm the exact app name before redeploying."
+                )
             data = await _client().post(f"/v1/plugin/apps/{deployment_id}/redeploy")
             task_id = data.get("task_id")
-            return f"🔄 Redeployment queued. Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
+            return f"🔄 Redeployment queued for **{actual_name}**. Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
         except Exception as e:
             return _compact_error("Error triggering redeploy", e)
 
@@ -270,6 +295,6 @@ def register_deployment_tools(mcp):
         """DESTRUCTIVE: delete an app and remove it from k3s."""
         try:
             await _client().delete(f"/v1/plugin/apps/{deployment_id}")
-            return f"🗑️ App `{deployment_id}` deleted and removed from cluster."
+            return f"🗑️ App `{deployment_id}` deleted and removed from the user's runtime."
         except Exception as e:
             return _compact_error("Error deleting app", e)

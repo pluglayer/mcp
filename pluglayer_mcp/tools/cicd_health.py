@@ -26,17 +26,3 @@ def register_cicd_health_tools(mcp):
             )
         except Exception as e:
             return _compact_error("Error generating pipeline", e)
-
-    @mcp.tool()
-    async def get_cluster_health() -> str:
-        """Check PlugLayer API and k3s cluster health."""
-        try:
-            health = await _client().get("/v1/plugin/health")
-            k3s = await _client().get("/v1/plugin/health/k3s")
-            return (
-                "🩺 **PlugLayer Health**\n"
-                f"API: {health.get('api', 'unknown')}\n"
-                f"k3s: {'healthy' if k3s.get('ok') else 'unavailable'} — {k3s.get('message', '')}"
-            )
-        except Exception as e:
-            return _compact_error("Error checking health", e)

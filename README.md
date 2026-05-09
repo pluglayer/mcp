@@ -99,6 +99,8 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | Tool | Description |
 |------|-------------|
 | `get_current_user` | Show the Authentik-backed user and `roles` |
+| `get_user_context` | Load the caller's stored user memory/context |
+| `update_user_context` | Update the caller's stored user memory/context |
 | `list_projects` | List authenticated user's projects |
 | `get_my_projects` | Alias for listing the current user's projects |
 | `create_project` | Create a new project namespace |
@@ -111,31 +113,33 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | `add_node_ssh` | Add a personal SSH node usable by all of the user's projects |
 | `list_registries` | List the registries currently available to the user |
 | `deploy_image` | Mirror a Docker image into PlugLayer's managed Docker Hub namespace, then deploy it after backend compute checks; if a similar app already exists and the namespace is full, use update/replace flow instead of a brand-new app |
+| `upload_image_archive_and_deploy` | Upload a locally built image archive from the user's machine, push it into an allowed registry, and deploy it |
 | `deploy_compose` | Deploy from docker-compose.yml after backend compute checks; if a similar app already exists and the namespace is full, use update/replace flow instead of a brand-new app |
 | `list_deployments` | List running apps/deployments |
 | `get_apps_by_project` | List apps inside a specific project; use this before deploy when you need to clarify update vs replace vs separate new app, especially when a full namespace should block duplicate new-app deploys |
 | `get_deployment_status` | Check app status and URL |
 | `get_logs` | Get app logs |
 | `get_app_logs` | Alias for getting app logs |
-| `redeploy` | Redeploy an app |
+| `exec_app_terminal` | Execute a command in the caller's own deployed app container |
+| `redeploy` | Redeploy an app after confirming the exact app name |
 | `restart_app` | Alias for restarting an app by redeploying it |
 | `rollback` | Roll back to previous version |
 | `delete_deployment` | Delete an app |
 | `list_project_domains` | List custom domains for a project |
 | `get_domains_by_project` | Alias for project-domain lookup; use this before asking which domain the user wants so existing project domains can be offered as options |
-| `add_custom_domain` | Add a single or wildcard custom domain and return DNS records |
+| `detect_custom_domain_provider` | Detect the likely DNS/domain provider so the user can confirm it before DNS instructions are shown |
+| `add_custom_domain` | Add a single or wildcard custom domain and return DNS records in a provider-friendly table |
 | `verify_custom_domain` | Verify TXT/CNAME DNS and activate if attached |
 | `attach_custom_domain` | Attach a verified custom domain to an app |
 | `detach_custom_domain` | Detach a domain while keeping verification |
 | `remove_custom_domain` | Remove a domain and its route |
 | `get_task_status` | Poll async operation progress |
 | `generate_github_actions` | Get CI/CD pipeline YAML |
-| `get_cluster_health` | Check cluster status |
 
 ## Example Conversations
 
 **Deploy your first app:**
-> "I have a FastAPI app at `ghcr.io/myorg/api:latest` that runs on port 8000. Deploy it to my `production` project."
+> "I have a FastAPI app at `ghcr.io/myorg/api:latest` that runs on port 8000. Deploy it into my `production` project in my cloud."
 
 **Convert docker-compose:**
 > "Here's my docker-compose.yml: [paste]. Deploy this to PlugLayer."
@@ -147,7 +151,7 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 > "Generate a GitHub Actions workflow for my `api` deployment so it auto-deploys on push to main."
 
 **Add a custom domain:**
-> "Add `api.example.com` to my production project, show me the DNS records, then verify it and attach it to my API app."
+> "Add `api.example.com` to my production project, detect the provider, show me the DNS records in a table, then verify it and attach it to my API app."
 
 ## Getting Your API Key
 
