@@ -1,7 +1,7 @@
 """
 PlugLayer MCP Server
 
-Exposes PlugLayer project, compute, deployment, CI/CD, and domain tools to AI
+Exposes PlugLayer project, compute visibility, deployment, CI/CD, and domain tools to AI
 assistants through the Model Context Protocol (MCP). The MCP intentionally goes
 through the FastAPI backend endpoints so auth, roles, ownership, quotas, compute
 checks, and k3s orchestration stay in one backend implementation.
@@ -22,7 +22,7 @@ You help users deploy, manage, and monitor applications on PlugLayer with the mi
 
 Current PlugLayer rules:
 - Authentik groups are exposed by PlugLayer as user.roles. Do not use groups/permissions fields.
-- Compute is account-level. End users should usually buy or confirm PlugLayer-managed compute, not provide SSH machines.
+- Compute access through MCP is read-only. Agents may inspect capacity and visible nodes, but must not mutate compute inventory through MCP/plugin token flows.
 - A project is a k3s namespace. An app is a deployment inside a project.
 - Custom domains are verified and routed by backend v1 domain endpoints; do not invent DNS or Traefik state.
 - Async operations return task IDs; always poll get_task_status until completion.

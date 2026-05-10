@@ -291,10 +291,15 @@ def register_deployment_tools(mcp):
             return _compact_error("Error triggering rollback", e)
 
     @mcp.tool()
-    async def delete_deployment(deployment_id: str) -> str:
-        """DESTRUCTIVE: delete an app and remove it from k3s."""
+    async def archive_deployment(deployment_id: str) -> str:
+        """Admin-only: archive an app record and remove its runtime workload while keeping it in PlugLayer history."""
         try:
-            await _client().delete(f"/v1/plugin/apps/{deployment_id}")
-            return f"🗑️ App `{deployment_id}` deleted and removed from the user's runtime."
+            await _client().post(f"/v1/plugin/apps/{deployment_id}/archive")
+            return f"🗂️ App `{deployment_id}` archived. The runtime workload is gone, but the record is kept in PlugLayer history."
         except Exception as e:
-            return _compact_error("Error deleting app", e)
+            return _compact_error("Error archiving app", e)
+
+    @mcp.tool()
+    async def delete_deployment(deployment_id: str) -> str:
+        """Deprecated alias for archive_deployment(). Admin-only."""
+        return await archive_deployment(deployment_id)

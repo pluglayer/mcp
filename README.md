@@ -110,7 +110,6 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | `get_my_available_computes` | Alias for available compute capacity |
 | `estimate_compute` | Estimate required compute, monthly price, and a tailored offer link; preferred before purchase/allocation decisions |
 | `list_nodes` | List accessible compute nodes |
-| `add_node_ssh` | Add a personal SSH node usable by all of the user's projects |
 | `list_registries` | List the registries currently available to the user |
 | `deploy_image` | Mirror a Docker image into PlugLayer's managed Docker Hub namespace, then deploy it after backend compute checks; if a similar app already exists and the namespace is full, use update/replace flow instead of a brand-new app |
 | `upload_image_archive_and_deploy` | Upload a locally built image archive from the user's machine, push it into an allowed registry, and deploy it |
@@ -124,7 +123,8 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | `redeploy` | Redeploy an app after confirming the exact app name |
 | `restart_app` | Alias for restarting an app by redeploying it |
 | `rollback` | Roll back to previous version |
-| `delete_deployment` | Delete an app |
+| `archive_deployment` | Admin-only: archive an app while keeping its record in PlugLayer history |
+| `delete_deployment` | Deprecated alias for `archive_deployment` |
 | `list_project_domains` | List custom domains for a project |
 | `get_domains_by_project` | Alias for project-domain lookup; use this before asking which domain the user wants so existing project domains can be offered as options |
 | `detect_custom_domain_provider` | Detect the likely DNS/domain provider so the user can confirm it before DNS instructions are shown |
@@ -132,7 +132,8 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | `verify_custom_domain` | Verify TXT/CNAME DNS and activate if attached |
 | `attach_custom_domain` | Attach a verified custom domain to an app |
 | `detach_custom_domain` | Detach a domain while keeping verification |
-| `remove_custom_domain` | Remove a domain and its route |
+| `archive_custom_domain` | Admin-only: archive a domain while keeping its record in PlugLayer history |
+| `remove_custom_domain` | Deprecated alias for `archive_custom_domain` |
 | `get_task_status` | Poll async operation progress |
 | `generate_github_actions` | Get CI/CD pipeline YAML |
 
@@ -143,9 +144,6 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 
 **Convert docker-compose:**
 > "Here's my docker-compose.yml: [paste]. Deploy this to PlugLayer."
-
-**Add a node:**
-> "Add my server at 192.168.1.100 as personal compute. Here's my SSH key: [paste]"
 
 **CI/CD setup:**
 > "Generate a GitHub Actions workflow for my `api` deployment so it auto-deploys on push to main."
