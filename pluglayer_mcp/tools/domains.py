@@ -188,20 +188,6 @@ def register_domain_tools(mcp):
             return _compact_error("Error detaching domain", e)
 
     @mcp.tool()
-    async def archive_custom_domain(domain_id: str) -> str:
-        """Admin-only: archive a custom domain record and remove its active route while keeping verification history."""
-        try:
-            await _client().post(f"/v1/plugin/domains/{domain_id}/archive")
-            return f"Custom domain `{domain_id}` archived. The route is removed, but the record remains in PlugLayer history."
-        except Exception as e:
-            return _compact_error("Error archiving domain", e)
-
-    @mcp.tool()
-    async def remove_custom_domain(domain_id: str) -> str:
-        """Deprecated alias for archive_custom_domain(). Admin-only."""
-        return await archive_custom_domain(domain_id)
-
-    @mcp.tool()
     async def update_app_domain(app_id: str, route_slug: str) -> str:
         """Update the app's default pluglayer.io route slug. Use this when the user chooses the built-in subdomain now and may switch to a custom domain later."""
         try:

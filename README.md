@@ -105,6 +105,8 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | `get_my_projects` | Alias for listing the current user's projects |
 | `create_project` | Create a new project namespace |
 | `get_project` | Get project details, current apps in the project, and attached custom-domain state |
+| `archive_project` | Archive one of the user's projects while keeping history |
+| `delete_project` | Deprecated alias for `archive_project` |
 | `get_compute_summary` | Show account-level personal + shared compute capacity; estimate first when sizing is still unclear |
 | `get_my_available_compute` | Show the current user's available compute capacity; pair with estimate first for planning |
 | `get_my_available_computes` | Alias for available compute capacity |
@@ -123,7 +125,7 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | `redeploy` | Redeploy an app after confirming the exact app name |
 | `restart_app` | Alias for restarting an app by redeploying it |
 | `rollback` | Roll back to previous version |
-| `archive_deployment` | Admin-only: archive an app while keeping its record in PlugLayer history |
+| `archive_deployment` | Archive one of the user's apps while keeping its record in PlugLayer history |
 | `delete_deployment` | Deprecated alias for `archive_deployment` |
 | `list_project_domains` | List custom domains for a project |
 | `get_domains_by_project` | Alias for project-domain lookup; use this before asking which domain the user wants so existing project domains can be offered as options |
@@ -132,8 +134,6 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | `verify_custom_domain` | Verify TXT/CNAME DNS and activate if attached |
 | `attach_custom_domain` | Attach a verified custom domain to an app |
 | `detach_custom_domain` | Detach a domain while keeping verification |
-| `archive_custom_domain` | Admin-only: archive a domain while keeping its record in PlugLayer history |
-| `remove_custom_domain` | Deprecated alias for `archive_custom_domain` |
 | `get_task_status` | Poll async operation progress |
 | `generate_github_actions` | Get CI/CD pipeline YAML |
 

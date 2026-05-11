@@ -30,8 +30,7 @@ def register_identity_project_tools(mcp):
                 "👤 **Current PlugLayer user**\n"
                 f"Email: {user.get('email')}\n"
                 f"Username: {user.get('username')}\n"
-                f"Roles: {', '.join(roles) if roles else 'none'}\n"
-                f"Superadmin: {'yes' if user.get('is_superuser') else 'no'}"
+                f"Roles: {', '.join(roles) if roles else 'none'}"
             )
         except Exception as e:
             return _compact_error("Error loading current user", e)
@@ -95,7 +94,7 @@ def register_identity_project_tools(mcp):
 
     @mcp.tool()
     async def get_project(project_id: str) -> str:
-        """Get project details. Accessible to the project owner or a PlugLayer admin role."""
+        """Get project details for one of the authenticated user's projects."""
         try:
             p = await _client().get(f"/v1/plugin/projects/{project_id}")
             p = p.get("project", p)
@@ -142,3 +141,21 @@ def register_identity_project_tools(mcp):
             return "\n".join(lines)
         except Exception as e:
             return _compact_error("Error getting project", e)
+
+    @mcp.tool()
+    async def archive_project(project_id: str) -> str:
+        """Archive one of the authenticated user's projects while keeping its history in PlugLayer."""
+        try:
+            data = await _client().post(f"/v1/plugin/projects/{project_id}/archive")
+            return (
+                f"🗂️ Project `{project_id}` archived.\n"
+                f"Deployments archived: {data.get('deployments_terminated', 0)}\n"
+                f"Domains archived: {data.get('domains_archived', 0)}"
+            )
+        except Exception as e:
+            return _compact_error("Error archiving project", e)
+
+    @mcp.tool()
+    async def delete_project(project_id: str) -> str:
+        """Deprecated alias for archive_project()."""
+        return await archive_project(project_id)

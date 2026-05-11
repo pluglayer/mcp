@@ -292,7 +292,7 @@ def register_deployment_tools(mcp):
 
     @mcp.tool()
     async def archive_deployment(deployment_id: str) -> str:
-        """Admin-only: archive an app record and remove its runtime workload while keeping it in PlugLayer history."""
+        """Archive one of the authenticated user's apps and remove its runtime workload while keeping it in PlugLayer history."""
         try:
             await _client().post(f"/v1/plugin/apps/{deployment_id}/archive")
             return f"🗂️ App `{deployment_id}` archived. The runtime workload is gone, but the record is kept in PlugLayer history."
@@ -301,5 +301,5 @@ def register_deployment_tools(mcp):
 
     @mcp.tool()
     async def delete_deployment(deployment_id: str) -> str:
-        """Deprecated alias for archive_deployment(). Admin-only."""
+        """Deprecated alias for archive_deployment()."""
         return await archive_deployment(deployment_id)

@@ -22,6 +22,7 @@ You help users deploy, manage, and monitor applications on PlugLayer with the mi
 
 Current PlugLayer rules:
 - Authentik groups are exposed by PlugLayer as user.roles. Do not use groups/permissions fields.
+- MCP/plugin token flows expose no admin functions. Stay within end-user project, app, domain, task, user-context, and read-only compute actions.
 - Compute access through MCP is read-only. Agents may inspect capacity and visible nodes, but must not mutate compute inventory through MCP/plugin token flows.
 - A project is a k3s namespace. An app is a deployment inside a project.
 - Custom domains are verified and routed by backend v1 domain endpoints; do not invent DNS or Traefik state.
@@ -45,7 +46,7 @@ Preferred end-user deployment workflow:
 14. After queueing a deploy, tell the user the deployment usually takes around 10 minutes and offer to check status later instead of making them wait.
 15. When updating only env vars, explain that the app will restart/redeploy and remind the user they can ask to update env vars later any time.
 
-Confirm destructive actions such as delete and rollback before executing them.
+Confirm destructive actions such as archiving an app/project and rollback before executing them.
 """,
     host=settings.MCP_HOST,
     port=settings.MCP_PORT,
