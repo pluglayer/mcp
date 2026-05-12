@@ -3,7 +3,54 @@
 import json
 import os
 
-from pluglayer_mcp.tools.shared import _client, _compact_error, _fmt_task_hint, _get_compute_summary, _status_emoji
+from pluglayer_mcp.tools.shared import (
+    _client,
+    _compact_error,
+    _fmt_task_hint,
+    _get_compute_summary,
+    _remember_context,
+    _status_emoji,
+)
+
+
+def _looks_like_public_docker_hub_image(image: str) -> bool:
+    candidate = (image or "").strip().lower()
+    if not candidate:
+        return False
+    first = candidate.split("/", 1)[0]
+    if "." in first or ":" in first:
+        return first in {"docker.io", "index.docker.io", "registry-1.docker.io"}
+    return True
+
+
+def _post_deploy_suggestions(app: dict, project_apps: list[dict]) -> list[str]:
+    others = [item for item in project_apps if item.get("id") != app.get("id")]
+    if not others:
+        return []
+    app_name = app.get("name") or "this app"
+    app_type = app.get("character_type") or ""
+    suggestions: list[str] = []
+    if app_type == "database":
+        for other in others:
+            suggestions.append(
+                f"- Your database is deployed as **{app_name}**. Do you want me to update **{other.get('name') or 'another app'}** with the new connection string env vars?"
+            )
+            break
+    elif app_type in {"api", "worker"}:
+        for other in others:
+            if (other.get("character_type") or "") == "web":
+                suggestions.append(
+                    f"- Your backend is deployed as **{app_name}**. Do you want me to update **{other.get('name') or 'frontend'}** with the deployed API URL env var?"
+                )
+                break
+    elif app_type == "web":
+        for other in others:
+            if (other.get("character_type") or "") in {"api", "worker"}:
+                suggestions.append(
+                    f"- Your frontend is deployed as **{app_name}**. Do you want me to update its env vars so it points at **{other.get('name') or 'backend'}** correctly?"
+                )
+                break
+    return suggestions
 
 
 def register_deployment_tools(mcp):
@@ -84,11 +131,12 @@ def register_deployment_tools(mcp):
         push_to_pluglayer_registry: bool = True,
         registry_id: str = "",
     ) -> str:
-        """Deploy a pullable Docker image into a project. Before using this in a project that already has apps, clarify whether the user wants to update an existing app, replace it, or add a separate new app. If the project namespace already looks occupied or quota-limited, refuse the separate new-app path by default and steer into update/replace flow first. By default, mirror it into an allowed managed registry first. For a local-only image built on the user's machine, use upload_image_archive_and_deploy() instead."""
+        """Deploy a pullable Docker image into a project. By default, mirror it into an allowed managed registry first, except for obvious public Docker Hub images such as common databases where direct pull is usually better. For a local-only image built on the user's machine, use upload_image_archive_and_deploy() instead."""
         try:
             compute = await _get_compute_summary()
             if not compute.get("can_deploy"):
                 return f"Cannot deploy yet: {compute.get('message')}"
+            should_mirror = push_to_pluglayer_registry and not _looks_like_public_docker_hub_image(image)
             payload = {
                 "name": name,
                 "route_slug": route_slug or None,
@@ -107,18 +155,39 @@ def register_deployment_tools(mcp):
             }
             endpoint = (
                 f"/v1/plugin/projects/{project_id}/apps/push-image"
-                if push_to_pluglayer_registry
+                if should_mirror
                 else f"/v1/plugin/projects/{project_id}/apps"
             )
             data = await _client().post(endpoint, payload)
             task_id = data.get("task_id")
             app = data.get("app", {})
             mirrored = data.get("mirrored_image")
+            project_apps = (await _client().get(f"/v1/plugin/projects/{project_id}/apps")).get("apps", [])
+            await _remember_context(
+                {
+                    "last_completed_task": {
+                        "type": "deploy_image",
+                        "project_id": project_id,
+                        "app_id": app.get("id"),
+                        "app_name": app.get("name") or name,
+                        "route_slug": app.get("route_slug") or route_slug or name,
+                    },
+                    "projects": {
+                        project_id: {
+                            "last_app_id": app.get("id"),
+                            "last_app_name": app.get("name") or name,
+                        }
+                    },
+                }
+            )
             lines = [f"🚀 App queued: **{name}** (id: `{app.get('id')}`). Task ID: `{task_id}`"]
             if mirrored:
                 lines.append(f"Mirrored image: `{mirrored}`")
+            elif _looks_like_public_docker_hub_image(image):
+                lines.append("Using the public image directly, so no mirror push was needed.")
             lines.append("This usually takes around 10 minutes. Feel free to keep working and ask me to check status later.")
             lines.append(_fmt_task_hint(task_id))
+            lines.extend(_post_deploy_suggestions(app, project_apps))
             return "\n".join(lines)
         except Exception as e:
             return _compact_error("Deployment failed", e)
@@ -138,7 +207,7 @@ def register_deployment_tools(mcp):
         compute_placement: str = "personal",
         registry_id: str = "",
     ) -> str:
-        """Upload a locally built Docker image archive (for example from `docker save`) to PlugLayer, push it into an allowed configured registry, and deploy from the mirrored image. Before using this in a project that already has apps, clarify whether the user wants to update an existing app, replace it, or add a separate new app. If the project namespace already looks occupied or quota-limited, refuse the separate new-app path by default and steer into update/replace flow first."""
+        """Upload a locally built Docker image archive (for example from `docker save`) to PlugLayer, push it into an allowed configured registry, and deploy from the mirrored image."""
         try:
             if not os.path.exists(image_archive_path):
                 return f"Image archive not found: {image_archive_path}"
@@ -167,11 +236,24 @@ def register_deployment_tools(mcp):
             task_id = data.get("task_id")
             app = data.get("app", {})
             mirrored = data.get("mirrored_image")
+            project_apps = (await _client().get(f"/v1/plugin/projects/{project_id}/apps")).get("apps", [])
+            await _remember_context(
+                {
+                    "last_completed_task": {
+                        "type": "upload_image_archive_and_deploy",
+                        "project_id": project_id,
+                        "app_id": app.get("id"),
+                        "app_name": app.get("name") or name,
+                        "route_slug": app.get("route_slug") or route_slug or name,
+                    }
+                }
+            )
             lines = [f"🚀 Uploaded image app queued: **{name}** (id: `{app.get('id')}`). Task ID: `{task_id}`"]
             if mirrored:
                 lines.append(f"Mirrored image: `{mirrored}`")
             lines.append("This usually takes around 10 minutes. Feel free to keep working and ask me to check status later.")
             lines.append(_fmt_task_hint(task_id))
+            lines.extend(_post_deploy_suggestions(app, project_apps))
             return "\n".join(lines)
         except Exception as e:
             return _compact_error("Uploaded image deployment failed", e)
@@ -184,24 +266,40 @@ def register_deployment_tools(mcp):
         route_slug: str = "",
         compute_placement: str = "personal",
     ) -> str:
-        """Deploy docker-compose.yml into a project. Use this when multiple services should run together. Before using this in a project that already has apps, clarify whether the user wants to update an existing app, replace it, or add a separate new app. If the project namespace already looks occupied or quota-limited, refuse the separate new-app path by default and steer into update/replace flow first."""
+        """Deploy docker-compose.yml into a project. Use this when multiple services should run together."""
         try:
             compute = await _get_compute_summary()
             if not compute.get("can_deploy"):
                 return f"Cannot deploy yet: {compute.get('message')}"
-            data = await _client().post(f"/v1/plugin/projects/{project_id}/apps", {
-                "name": app_name or "compose-app",
-                "route_slug": route_slug or None,
-                "compute_placement": compute_placement,
-                "source": {"type": "compose", "compose_yaml": compose_yaml},
-            })
+            data = await _client().post(
+                f"/v1/plugin/projects/{project_id}/apps",
+                {
+                    "name": app_name or "compose-app",
+                    "route_slug": route_slug or None,
+                    "compute_placement": compute_placement,
+                    "source": {"type": "compose", "compose_yaml": compose_yaml},
+                },
+            )
             task_id = data.get("task_id")
             app = data.get("app", {})
-            return (
-                f"🚀 Compose app queued (id: `{app.get('id')}`). Task ID: `{task_id}`\n"
-                "This usually takes around 10 minutes. Feel free to keep working and ask me to check status later.\n"
-                f"{_fmt_task_hint(task_id)}"
+            project_apps = (await _client().get(f"/v1/plugin/projects/{project_id}/apps")).get("apps", [])
+            await _remember_context(
+                {
+                    "last_completed_task": {
+                        "type": "deploy_compose",
+                        "project_id": project_id,
+                        "app_id": app.get("id"),
+                        "app_name": app.get("name") or app_name or "compose-app",
+                    }
+                }
             )
+            lines = [
+                f"🚀 Compose app queued (id: `{app.get('id')}`). Task ID: `{task_id}`",
+                "This usually takes around 10 minutes. Feel free to keep working and ask me to check status later.",
+                _fmt_task_hint(task_id),
+            ]
+            lines.extend(_post_deploy_suggestions(app, project_apps))
+            return "\n".join(lines)
         except Exception as e:
             return _compact_error("Compose deployment failed", e)
 
@@ -265,6 +363,7 @@ def register_deployment_tools(mcp):
                 )
             data = await _client().post(f"/v1/plugin/apps/{deployment_id}/redeploy")
             task_id = data.get("task_id")
+            await _remember_context({"last_completed_task": {"type": "redeploy", "app_id": deployment_id, "app_name": actual_name}})
             return f"🔄 Redeployment queued for **{actual_name}**. Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
         except Exception as e:
             return _compact_error("Error triggering redeploy", e)
@@ -275,6 +374,7 @@ def register_deployment_tools(mcp):
         try:
             data = await _client().post(f"/v1/plugin/apps/{app_id}/restart")
             task_id = data.get("task_id")
+            await _remember_context({"last_completed_task": {"type": "restart_app", "app_id": app_id}})
             return f"🔄 App restart queued. Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
         except Exception as e:
             return _compact_error("Error restarting app", e)
@@ -286,20 +386,24 @@ def register_deployment_tools(mcp):
             params = {"revision": revision} if revision else {}
             data = await _client().post(f"/v1/plugin/apps/{deployment_id}/rollback", params=params)
             task_id = data.get("task_id")
+            await _remember_context({"last_completed_task": {"type": "rollback", "app_id": deployment_id, "revision": revision}})
             return f"⏪ Rollback queued. Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
         except Exception as e:
             return _compact_error("Error triggering rollback", e)
 
     @mcp.tool()
-    async def archive_deployment(deployment_id: str) -> str:
-        """Archive one of the authenticated user's apps and remove its runtime workload while keeping it in PlugLayer history."""
+    async def remove_app(app_id: str) -> str:
+        """Remove one of the authenticated user's apps. This deletes the runtime workload and revokes its active routing while marking the app as removed in PlugLayer."""
         try:
-            await _client().post(f"/v1/plugin/apps/{deployment_id}/archive")
-            return f"🗂️ App `{deployment_id}` archived. The runtime workload is gone, but the record is kept in PlugLayer history."
+            app_data = await _client().get(f"/v1/plugin/apps/{app_id}")
+            app = app_data.get("app", {})
+            await _client().delete(f"/v1/plugin/apps/{app_id}")
+            await _remember_context({"last_completed_task": {"type": "remove_app", "app_id": app_id, "app_name": app.get("name")}})
+            return f"🧹 App **{app.get('name') or app_id}** removed. Its runtime workload and active PlugLayer routing were torn down."
         except Exception as e:
-            return _compact_error("Error archiving app", e)
+            return _compact_error("Error removing app", e)
 
     @mcp.tool()
     async def delete_deployment(deployment_id: str) -> str:
-        """Deprecated alias for archive_deployment()."""
-        return await archive_deployment(deployment_id)
+        """Alias for remove_app() for clients still using deployment wording."""
+        return await remove_app(deployment_id)

@@ -1,6 +1,6 @@
 """Identity Projects MCP tools."""
 
-from pluglayer_mcp.tools.shared import _client, _compact_error, _fmt_task_hint, _status_emoji
+from pluglayer_mcp.tools.shared import _client, _compact_error, _fmt_task_hint, _remember_context, _status_emoji
 
 
 def _domain_line(domain: dict) -> str:
@@ -81,6 +81,21 @@ def register_identity_project_tools(mcp):
             })
             project = data.get("project", {})
             task_id = data.get("task_id")
+            await _remember_context(
+                {
+                    "last_completed_task": {
+                        "type": "create_project",
+                        "project_id": project.get("id"),
+                        "project_name": project.get("name", name),
+                    },
+                    "projects": {
+                        project.get("id"): {
+                            "name": project.get("name", name),
+                            "namespace": project.get("namespace"),
+                        }
+                    },
+                }
+            )
             return (
                 f"✅ Project **{project.get('name', name)}** created.\n"
                 f"Project ID: `{project.get('id')}`\n"
@@ -143,19 +158,20 @@ def register_identity_project_tools(mcp):
             return _compact_error("Error getting project", e)
 
     @mcp.tool()
-    async def archive_project(project_id: str) -> str:
-        """Archive one of the authenticated user's projects while keeping its history in PlugLayer."""
+    async def remove_project(project_id: str) -> str:
+        """Remove one of the authenticated user's projects from active use. PlugLayer keeps the historical record so recovery remains possible."""
         try:
-            data = await _client().post(f"/v1/plugin/projects/{project_id}/archive")
+            data = await _client().delete(f"/v1/plugin/projects/{project_id}")
+            await _remember_context({"last_completed_task": {"type": "remove_project", "project_id": project_id}})
             return (
-                f"🗂️ Project `{project_id}` archived.\n"
-                f"Deployments archived: {data.get('deployments_terminated', 0)}\n"
-                f"Domains archived: {data.get('domains_archived', 0)}"
+                f"🧹 Project `{project_id}` removed from active use.\n"
+                f"Apps removed or terminated: {data.get('deployments_terminated', 0)}\n"
+                f"Domains detached or archived: {data.get('domains_archived', 0)}"
             )
         except Exception as e:
-            return _compact_error("Error archiving project", e)
+            return _compact_error("Error removing project", e)
 
     @mcp.tool()
     async def delete_project(project_id: str) -> str:
-        """Deprecated alias for archive_project()."""
-        return await archive_project(project_id)
+        """Alias for remove_project()."""
+        return await remove_project(project_id)

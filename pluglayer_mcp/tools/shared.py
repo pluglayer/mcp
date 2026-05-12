@@ -51,3 +51,10 @@ def _compact_error(prefix: str, exc: Exception) -> str:
 
 async def _get_compute_summary() -> dict[str, Any]:
     return await _client().get("/v1/plugin/compute")
+
+
+async def _remember_context(context_patch: dict[str, Any], merge: bool = True) -> None:
+    try:
+        await _client().patch(f"/v1/plugin/user-context?merge={'true' if merge else 'false'}", context_patch)
+    except Exception:
+        pass
