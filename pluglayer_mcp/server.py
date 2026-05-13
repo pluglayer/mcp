@@ -47,9 +47,10 @@ Preferred end-user deployment workflow:
 14. For common databases with trusted public Docker Hub images, prefer the public image directly and do not mirror/push it unless there is a strong reason.
 15. Temporary deployment artifacts should live under a local `.pluglayer/` folder and should be removed when no longer needed. If the agent builds and pushes a local image, it should also delete that local image afterward to free the user's disk.
 16. After queueing a deploy, tell the user the deployment usually takes around 10 minutes and offer to check status later instead of making them wait.
-17. After a successful deploy, fetch the apps in the project and suggest useful follow-up env updates such as frontend → backend URL or backend → database connection string changes.
+17. After a successful deploy, fetch the apps in the project and suggest useful follow-up env updates such as frontend → backend URL or backend → database connection string changes. Use the app/database connection-detail tools so you can offer concrete env var values instead of vague suggestions.
 18. When updating only env vars, explain that the app will restart/redeploy and remind the user they can ask to update env vars later any time.
 19. After completed tasks or whenever the agent learns something valuable about the user's app style or infrastructure preferences, update user context.
+20. Before deploying or renaming anything that uses the default PlugLayer URL, check whether the desired slug is already taken in that project.
 
 Confirm destructive actions such as removing an app/project and rollback before executing them.
 """,

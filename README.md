@@ -118,15 +118,22 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 | `deploy_compose` | Deploy from docker-compose.yml after backend compute checks; if a similar app already exists and the namespace is full, use update/replace flow instead of a brand-new app |
 | `list_deployments` | List running apps/deployments |
 | `get_apps_by_project` | List apps inside a specific project; use this before deploy when you need to clarify update vs replace vs separate new app, especially when a full namespace should block duplicate new-app deploys |
+| `check_slug_availability` | Check whether a PlugLayer slug is free inside a project before deploy or rename |
 | `get_deployment_status` | Check app status and URL |
 | `get_logs` | Get app logs |
 | `get_app_logs` | Alias for getting app logs |
+| `get_app_connection_env_vars` | Get concrete connection env vars and connection strings for an app/database so dependent apps can be updated correctly |
 | `exec_app_terminal` | Execute a command in the caller's own deployed app container |
 | `redeploy` | Redeploy an app after confirming the exact app name |
 | `restart_app` | Alias for restarting an app by redeploying it |
 | `rollback` | Roll back to previous version |
 | `remove_app` | Remove one of the user's apps, tear down its runtime workload, revoke active routing, and mark it as removed |
 | `delete_deployment` | Alias for `remove_app` |
+| `list_database_templates` | List ready-to-deploy database templates |
+| `list_user_databases` | List the caller's provisioned databases, optionally by project |
+| `create_database` | Provision a database from a template after backend compute and project checks |
+| `get_database_connection_details` | Get connection strings, env vars, and docs for a provisioned database |
+| `get_database_logs` | Read logs from a provisioned database app |
 | `list_project_domains` | List custom domains for a project |
 | `get_domains_by_project` | Alias for project-domain lookup; use this before asking which domain the user wants so existing project domains can be offered as options |
 | `detect_custom_domain_provider` | Detect the likely DNS/domain provider so the user can confirm it before DNS instructions are shown |
@@ -150,6 +157,9 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 
 **Add a custom domain:**
 > "Add `api.example.com` to my production project, detect the provider, show me the DNS records in a table, then verify it and attach it to my API app."
+
+**Provision a database and wire the backend to it:**
+> "Create a Postgres database in my `marketplace` project, check whether the slug `postgres` is available first, and after it finishes show me the connection env vars so we can update my backend."
 
 ## Getting Your API Key
 

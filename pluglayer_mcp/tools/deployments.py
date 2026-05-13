@@ -116,6 +116,20 @@ def register_deployment_tools(mcp):
             return _compact_error("Error listing project apps", e)
 
     @mcp.tool()
+    async def check_slug_availability(project_id: str, slug: str, exclude_app_id: str = "") -> str:
+        """Check whether a PlugLayer slug is available inside a project before deploying or renaming an app/database."""
+        try:
+            data = await _client().get(
+                "/v1/plugin/apps/slug-availability",
+                params={"project_id": project_id, "slug": slug, "exclude_app_id": exclude_app_id or None},
+            )
+            if data.get("available"):
+                return f"✅ Slug `{data.get('slug')}` is available in project `{project_id}`."
+            return f"❌ Slug `{data.get('slug')}` is not available in project `{project_id}`. {data.get('message') or ''}".strip()
+        except Exception as e:
+            return _compact_error("Error checking slug availability", e)
+
+    @mcp.tool()
     async def deploy_image(
         project_id: str,
         name: str,
@@ -326,6 +340,151 @@ def register_deployment_tools(mcp):
             return f"📋 **Logs** (last {lines} lines):\n\n```\n{data.get('logs', 'No logs available')}\n```"
         except Exception as e:
             return _compact_error("Error getting logs", e)
+
+    @mcp.tool()
+    async def get_app_connection_env_vars(app_id: str) -> str:
+        """Get env vars and connection fields for an app. Use this after provisioning so you can update dependent apps with the right URLs or connection strings."""
+        try:
+            data = await _client().get(f"/v1/plugin/apps/{app_id}")
+            app = data.get("app", {})
+            env_vars = app.get("env_vars") or {}
+            connection_fields = ((app.get("database_details") or {}).get("connection_fields")) or []
+            lines = [
+                f"🔐 **App connection/env details** for **{app.get('name') or app_id}**",
+                f"Route slug: `{app.get('route_slug') or app.get('name')}`",
+                f"Primary host: {app.get('primary_hostname') or 'not ready yet'}",
+            ]
+            if env_vars:
+                lines.append("\nEnv vars:")
+                lines.extend([f"- `{key}` = `{value}`" for key, value in env_vars.items()])
+            if connection_fields:
+                lines.append("\nConnection fields:")
+                lines.extend([f"- `{field.get('key')}` = `{field.get('value')}`" for field in connection_fields])
+            if not env_vars and not connection_fields:
+                lines.append("\nNo env vars or connection fields are available yet.")
+            return "\n".join(lines)
+        except Exception as e:
+            return _compact_error("Error getting app connection/env vars", e)
+
+    @mcp.tool()
+    async def list_database_templates() -> str:
+        """List database-ready marketplace templates. Use this first when the user asks to provision a database through PlugLayer."""
+        try:
+            data = await _client().get("/v1/plugin/databases/templates")
+            templates = data.get("templates", [])
+            if not templates:
+                return "No database templates are available right now."
+            lines = ["Available database templates:\n"]
+            for template in templates:
+                requirements = template.get("requirements") or {}
+                config = template.get("database_config") or {}
+                lines.append(
+                    f"- **{template.get('name')}** (`{template.get('id')}`)\n"
+                    f"  Engine: {config.get('engine') or template.get('category')} | Slug suggestion: `{template.get('slug')}`\n"
+                    f"  Minimum: {requirements.get('min_cpu_cores', 0)} CPU, {requirements.get('min_ram_gb', 0)}GB RAM, {requirements.get('min_storage_gb', 0)}GB disk"
+                )
+            return "\n".join(lines)
+        except Exception as e:
+            return _compact_error("Error listing database templates", e)
+
+    @mcp.tool()
+    async def list_user_databases(project_id: str = "") -> str:
+        """List the authenticated user's databases, optionally filtered to one project."""
+        try:
+            data = await _client().get("/v1/plugin/databases", params={"project_id": project_id} if project_id else None)
+            databases = data.get("databases", [])
+            if not databases:
+                return "No databases found yet."
+            lines = ["Your databases:\n"]
+            for database in databases:
+                lines.append(
+                    f"{_status_emoji(database.get('status'))} **{database.get('name')}** (`{database.get('id')}`)\n"
+                    f"   Engine: {((database.get('database_details') or {}).get('engine')) or 'database'} | Host: {database.get('primary_hostname') or 'provisioning'}\n"
+                    f"   Project: `{database.get('project_id')}`"
+                )
+            return "\n".join(lines)
+        except Exception as e:
+            return _compact_error("Error listing user databases", e)
+
+    @mcp.tool()
+    async def create_database(
+        template_id: str,
+        app_name: str,
+        project_id: str = "",
+        project_name: str = "",
+        route_slug: str = "",
+        cpu_limit: str = "",
+        memory_limit: str = "",
+        storage_gb: int = 0,
+    ) -> str:
+        """Provision a database from a ready marketplace template. If compute is insufficient, PlugLayer returns a clear message so you can guide the user to add more compute first."""
+        try:
+            payload = {
+                "template_id": template_id,
+                "project_id": project_id or None,
+                "project_name": project_name or None,
+                "app_name": app_name,
+                "route_slug": route_slug or None,
+                "cpu_limit": cpu_limit or None,
+                "memory_limit": memory_limit or None,
+                "storage_gb": storage_gb or None,
+            }
+            data = await _client().post("/v1/plugin/databases", payload)
+            task_id = data.get("task_id")
+            app = data.get("app", {})
+            await _remember_context(
+                {
+                    "last_completed_task": {
+                        "type": "create_database",
+                        "project_id": data.get("project_id"),
+                        "app_id": app.get("id"),
+                        "app_name": app.get("name") or app_name,
+                        "route_slug": app.get("route_slug") or route_slug or app_name,
+                    }
+                }
+            )
+            return (
+                f"🗄️ Database queued: **{app.get('name') or app_name}** (`{app.get('id')}`)\n"
+                f"Task ID: `{task_id}`\n"
+                f"{_fmt_task_hint(task_id)}\n"
+                "After provisioning finishes, call get_database_connection_details() and update dependent apps with the new env vars or connection string."
+            )
+        except Exception as e:
+            return _compact_error("Database provisioning failed", e)
+
+    @mcp.tool()
+    async def get_database_connection_details(database_id: str) -> str:
+        """Get a provisioned database's connection strings, env vars, and docs so you can wire other apps automatically."""
+        try:
+            data = await _client().get(f"/v1/plugin/databases/{database_id}")
+            database = data.get("database", {})
+            env_vars = data.get("env_vars") or {}
+            connection_fields = data.get("connection_fields") or []
+            lines = [
+                f"🗄️ **Database details** for **{database.get('name') or database_id}**",
+                f"Host: {database.get('primary_hostname') or 'not ready yet'}",
+                f"Status: {database.get('status')}",
+            ]
+            if connection_fields:
+                lines.append("\nConnection fields:")
+                lines.extend([f"- `{field.get('key')}` = `{field.get('value')}`" for field in connection_fields])
+            if env_vars:
+                lines.append("\nEnv vars:")
+                lines.extend([f"- `{key}` = `{value}`" for key, value in env_vars.items()])
+            if data.get("documentation_url"):
+                lines.append(f"\nDocs: {data.get('documentation_url')}")
+            return "\n".join(lines)
+        except Exception as e:
+            return _compact_error("Error getting database connection details", e)
+
+    @mcp.tool()
+    async def get_database_logs(database_id: str, lines: int = 100) -> str:
+        """Get recent logs from a provisioned database."""
+        try:
+            data = await _client().get(f"/v1/plugin/databases/{database_id}/logs", params={"tail": lines})
+            return f"📋 **Database logs** (last {lines} lines):\n\n```\n{data.get('logs', 'No logs available')}\n```"
+        except Exception as e:
+            return _compact_error("Error getting database logs", e)
 
     @mcp.tool()
     async def get_app_logs(app_id: str, lines: int = 100) -> str:
