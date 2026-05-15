@@ -96,6 +96,18 @@ The MCP calls the PlugLayer FastAPI backend instead of re-implementing backend b
 
 Managed registries are configured by PlugLayer admins in the platform UI/API. When `deploy_image` uses mirroring, the backend picks a registry the current user is allowed to use and keeps Kubernetes pull secrets in sync automatically.
 
+Databases are a first-class **Data Layer** workflow in MCP. When a user needs a new database, wants to know whether one already exists, asks for a connection string, or needs env vars to wire an app to a database, the preferred MCP path is:
+
+1. `list_user_databases`
+2. if needed, `list_database_templates`
+3. `check_slug_availability`
+4. `create_database`
+5. `get_task_status`
+6. `get_database_connection_details`
+7. optionally `get_database_logs` when troubleshooting
+
+After provisioning a database, the assistant should proactively suggest exact env var updates for dependent apps instead of leaving the user with only a raw connection string.
+
 | Tool | Description |
 |------|-------------|
 | `get_current_user` | Show the Authentik-backed user and `roles` |
@@ -160,6 +172,9 @@ Managed registries are configured by PlugLayer admins in the platform UI/API. Wh
 
 **Provision a database and wire the backend to it:**
 > "Create a Postgres database in my `marketplace` project, check whether the slug `postgres` is available first, and after it finishes show me the connection env vars so we can update my backend."
+
+**Reuse an existing database instead of creating a new one:**
+> "Check whether I already have a Mongo or Postgres database in my project. If I do, show me the connection details and suggest the backend env vars I should update."
 
 ## Getting Your API Key
 
