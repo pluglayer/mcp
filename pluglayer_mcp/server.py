@@ -29,6 +29,7 @@ Current PlugLayer rules:
 - Async operations return task IDs; always poll get_task_status until completion.
 - Do not expose or reason from cluster-level health/state through MCP. Use only project/app/node information that belongs to the user.
 - Databases are first-class Data Layer resources. Prefer the database-specific MCP tools for template discovery, provisioning, status, connection details, and logs instead of generic app deploy flows when the user needs a standard database.
+- When provisioning a database or deploying a marketplace template through MCP, resolve required deploy-time env vars in the MCP flow itself. Password/secret/token/key fields that are marked or implied as randomizable should be generated there instead of leaving `{{RANDOM_*}}` placeholders unresolved.
 
 Preferred end-user deployment workflow:
 1. Run get_current_user, get_user_context, and list_projects.
@@ -56,10 +57,14 @@ Preferred end-user deployment workflow:
 23. For any database request, be autonomous:
    - check whether a suitable database already exists
    - otherwise list Data Layer templates and recommend one
+   - resolve required database env vars before deploy, including generating real random secrets for password-like fields and filling database-name placeholders from the chosen app name
    - provision the database through Data Layer
    - poll task status until completion
    - fetch connection strings and env vars
    - suggest the exact env updates needed for the dependent app or apps
+24. Marketplace template deployment must support both flows:
+   - deploy into an existing project when the user chose one
+   - create a new project during template deployment when the user does not already have the right project
 
 Confirm destructive actions such as removing an app/project and rollback before executing them.
 """,

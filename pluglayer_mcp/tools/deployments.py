@@ -2,6 +2,8 @@
 
 import json
 import os
+import re
+import secrets
 
 from pluglayer_mcp.tools.shared import (
     _client,
@@ -21,6 +23,69 @@ def _looks_like_public_docker_hub_image(image: str) -> bool:
     if "." in first or ":" in first:
         return first in {"docker.io", "index.docker.io", "registry-1.docker.io"}
     return True
+
+
+def _slugify(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9-]", "-", (value or "").strip().lower()).strip("-")
+    return slug or "app"
+
+
+def _random_secret(length_bytes: int = 24) -> str:
+    return secrets.token_hex(length_bytes)
+
+
+def _resolve_template_value(template_value: str, *, app_name: str, route_slug: str) -> str:
+    rendered = (template_value or "").replace("{{APP_NAME}}", app_name).replace("{{ROUTE_SLUG}}", route_slug)
+    rendered = re.sub(r"\$\{APP_NAME(?::-([^}]*))?\}", app_name, rendered)
+    rendered = re.sub(r"\$\{ROUTE_SLUG(?::-([^}]*))?\}", route_slug, rendered)
+    return rendered
+
+
+def _looks_secret_like(env_var: dict) -> bool:
+    key = str(env_var.get("key") or "").lower()
+    description = str(env_var.get("description") or "").lower()
+    value_type = str(env_var.get("value_type") or "").lower()
+    if env_var.get("randomizable") or env_var.get("sensitive"):
+        return True
+    if value_type in {"password", "secret", "token"}:
+        return True
+    secret_words = ("password", "secret", "token", "key")
+    return any(word in key for word in secret_words) or any(word in description for word in secret_words)
+
+
+def _build_template_env_overrides(
+    template: dict,
+    *,
+    app_name: str,
+    route_slug: str,
+    provided_overrides: dict[str, str] | None = None,
+) -> dict[str, str]:
+    overrides = dict(provided_overrides or {})
+    env_vars = (
+        template.get("template_env_vars")
+        or ((template.get("database_config") or {}).get("env_vars"))
+        or []
+    )
+    for env_var in env_vars:
+        key = env_var.get("key")
+        if not key or overrides.get(key):
+            continue
+        resolved = _resolve_template_value(str(env_var.get("value") or ""), app_name=app_name, route_slug=route_slug)
+        if re.search(r"\{\{RANDOM_[A-Z0-9_]+\}\}", resolved):
+            overrides[key] = _random_secret()
+            continue
+        if re.search(r"\{\{[A-Z0-9_]+\}\}", resolved):
+            if _looks_secret_like(env_var):
+                overrides[key] = _random_secret()
+            elif env_var.get("required"):
+                overrides[key] = app_name
+            continue
+        if env_var.get("required") and not resolved and _looks_secret_like(env_var):
+            overrides[key] = _random_secret()
+            continue
+        if resolved:
+            overrides[key] = resolved
+    return overrides
 
 
 def _post_deploy_suggestions(app: dict, project_apps: list[dict]) -> list[str]:
@@ -367,6 +432,138 @@ def register_deployment_tools(mcp):
             return _compact_error("Error getting app connection/env vars", e)
 
     @mcp.tool()
+    async def list_marketplace_templates(
+        category: str = "",
+        search: str = "",
+        featured_only: bool = False,
+        test_state: str = "",
+    ) -> str:
+        """List deployable marketplace templates. Use this before deploying a ready-made template through PlugLayer."""
+        try:
+            params = {
+                "category": category or None,
+                "search": search or None,
+                "featured": True if featured_only else None,
+                "test_state": test_state or None,
+            }
+            data = await _client().get("/v1/plugin/marketplace/templates", params=params)
+            templates = data.get("templates", [])
+            if not templates:
+                return "No marketplace templates matched that filter."
+            lines = ["Marketplace templates:\n"]
+            for template in templates:
+                requirements = template.get("requirements") or {}
+                exposure = template.get("exposure_config") or {}
+                lines.append(
+                    f"- **{template.get('name')}** (`{template.get('id')}`)\n"
+                    f"  Category: {template.get('category')} | Exposure: {exposure.get('type') or 'https'}\n"
+                    f"  Minimum: {requirements.get('min_cpu_cores', 0)} CPU, {requirements.get('min_ram_gb', 0)}GB RAM, {requirements.get('min_storage_gb', 0)}GB disk"
+                )
+            return "\n".join(lines)
+        except Exception as e:
+            return _compact_error("Error listing marketplace templates", e)
+
+    @mcp.tool()
+    async def get_marketplace_template(template_id_or_slug: str) -> str:
+        """Get one marketplace template, including env var requirements. Use this before template deployment so you can resolve secrets and choose project flow correctly."""
+        try:
+            data = await _client().get(f"/v1/plugin/marketplace/templates/{template_id_or_slug}")
+            template = data.get("template", {})
+            requirements = template.get("requirements") or {}
+            env_vars = template.get("template_env_vars") or []
+            exposure = template.get("exposure_config") or {}
+            lines = [
+                f"📦 **Template**: {template.get('name')}",
+                f"ID: `{template.get('id')}`",
+                f"Category: {template.get('category')}",
+                f"Exposure: {exposure.get('type') or 'https'}",
+                f"Minimum: {requirements.get('min_cpu_cores', 0)} CPU, {requirements.get('min_ram_gb', 0)}GB RAM, {requirements.get('min_storage_gb', 0)}GB disk",
+            ]
+            if env_vars:
+                lines.append("\nEnv vars:")
+                for env_var in env_vars:
+                    meta = []
+                    if env_var.get("required"):
+                        meta.append("required")
+                    if env_var.get("sensitive"):
+                        meta.append("sensitive")
+                    if env_var.get("randomizable"):
+                        meta.append("randomizable")
+                    lines.append(
+                        f"- `{env_var.get('key')}` = `{env_var.get('value') or ''}`"
+                        + (f" ({', '.join(meta)})" if meta else "")
+                    )
+            return "\n".join(lines)
+        except Exception as e:
+            return _compact_error("Error getting marketplace template", e)
+
+    @mcp.tool()
+    async def deploy_marketplace_template(
+        template_id: str,
+        app_name: str,
+        project_id: str = "",
+        project_name: str = "",
+        route_slug: str = "",
+        compute_placement: str = "auto",
+        cpu_limit: str = "",
+        memory_limit: str = "",
+        storage_gb: int = 0,
+        env_overrides: dict[str, str] | None = None,
+        tcp_allowed_cidrs: list[str] | None = None,
+    ) -> str:
+        """Deploy a marketplace template into an existing project or a brand-new project created during the same flow. Secret-like required env vars are auto-resolved here before the deploy request is sent."""
+        try:
+            if not project_id and not project_name:
+                return "Template deployment needs either `project_id` or `project_name`."
+            compute = await _get_compute_summary()
+            if not compute.get("can_deploy"):
+                return f"Cannot deploy yet: {compute.get('message')}"
+            template_data = await _client().get(f"/v1/plugin/marketplace/templates/{template_id}")
+            template = template_data.get("template", {})
+            route_slug_value = route_slug or _slugify(app_name)
+            resolved_overrides = _build_template_env_overrides(
+                template,
+                app_name=app_name,
+                route_slug=route_slug_value,
+                provided_overrides=env_overrides,
+            )
+            payload = {
+                "project_id": project_id or None,
+                "project_name": project_name or None,
+                "app_name": app_name,
+                "route_slug": route_slug_value,
+                "compute_placement": compute_placement,
+                "env_overrides": resolved_overrides,
+                "cpu_limit": cpu_limit or None,
+                "memory_limit": memory_limit or None,
+                "storage_gb": storage_gb or None,
+                "tcp_allowed_cidrs": tcp_allowed_cidrs or [],
+            }
+            data = await _client().post(f"/v1/plugin/marketplace/templates/{template_id}/deploy", payload)
+            task_id = data.get("task_id")
+            app = data.get("app", {})
+            await _remember_context(
+                {
+                    "last_completed_task": {
+                        "type": "deploy_marketplace_template",
+                        "project_id": data.get("project_id") or project_id,
+                        "app_id": app.get("id"),
+                        "app_name": app.get("name") or app_name,
+                        "route_slug": app.get("route_slug") or route_slug_value,
+                    }
+                }
+            )
+            return (
+                f"📦 Template deployment queued: **{app.get('name') or app_name}** (`{app.get('id')}`)\n"
+                f"Project: `{data.get('project_id') or project_id or project_name}`\n"
+                f"Task ID: `{task_id}`\n"
+                f"{_fmt_task_hint(task_id)}\n"
+                "Any required secret-like env vars were resolved at deploy time, including random credentials where the template asked for them."
+            )
+        except Exception as e:
+            return _compact_error("Template deployment failed", e)
+
+    @mcp.tool()
     async def list_database_templates() -> str:
         """List database-ready marketplace templates. Use this first when the user asks to provision a database through PlugLayer."""
         try:
@@ -416,18 +613,45 @@ def register_deployment_tools(mcp):
         cpu_limit: str = "",
         memory_limit: str = "",
         storage_gb: int = 0,
+        compute_placement: str = "auto",
+        env_overrides: dict[str, str] | None = None,
+        tcp_allowed_cidrs: list[str] | None = None,
     ) -> str:
-        """Provision a database from a ready marketplace template. If compute is insufficient, PlugLayer returns a clear message so you can guide the user to add more compute first."""
+        """Provision a database from a ready marketplace template. The MCP tool resolves required DB names and secret-like template fields here, including random password generation, before sending the deploy request."""
         try:
+            if not project_id and not project_name:
+                return "Database provisioning needs either `project_id` or `project_name`."
+            templates_data = await _client().get("/v1/plugin/databases/templates")
+            templates = templates_data.get("templates", [])
+            template = next(
+                (
+                    item
+                    for item in templates
+                    if item.get("id") == template_id or item.get("slug") == template_id
+                ),
+                None,
+            )
+            if not template:
+                return f"Database template `{template_id}` was not found."
+            route_slug_value = route_slug or _slugify(app_name)
+            resolved_overrides = _build_template_env_overrides(
+                template,
+                app_name=app_name,
+                route_slug=route_slug_value,
+                provided_overrides=env_overrides,
+            )
             payload = {
                 "template_id": template_id,
                 "project_id": project_id or None,
                 "project_name": project_name or None,
                 "app_name": app_name,
-                "route_slug": route_slug or None,
+                "route_slug": route_slug_value,
+                "compute_placement": compute_placement,
+                "env_overrides": resolved_overrides,
                 "cpu_limit": cpu_limit or None,
                 "memory_limit": memory_limit or None,
                 "storage_gb": storage_gb or None,
+                "tcp_allowed_cidrs": tcp_allowed_cidrs or [],
             }
             data = await _client().post("/v1/plugin/databases", payload)
             task_id = data.get("task_id")
@@ -439,7 +663,7 @@ def register_deployment_tools(mcp):
                         "project_id": data.get("project_id"),
                         "app_id": app.get("id"),
                         "app_name": app.get("name") or app_name,
-                        "route_slug": app.get("route_slug") or route_slug or app_name,
+                        "route_slug": app.get("route_slug") or route_slug_value,
                     }
                 }
             )
@@ -447,6 +671,7 @@ def register_deployment_tools(mcp):
                 f"🗄️ Database queued: **{app.get('name') or app_name}** (`{app.get('id')}`)\n"
                 f"Task ID: `{task_id}`\n"
                 f"{_fmt_task_hint(task_id)}\n"
+                "Required DB fields were resolved at deploy time, including generated secrets for password-like template env vars.\n"
                 "After provisioning finishes, call get_database_connection_details() and update dependent apps with the new env vars or connection string."
             )
         except Exception as e:

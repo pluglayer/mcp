@@ -102,11 +102,19 @@ Databases are a first-class **Data Layer** workflow in MCP. When a user needs a 
 2. if needed, `list_database_templates`
 3. `check_slug_availability`
 4. `create_database`
+   - the MCP tool resolves required deploy-time database env vars itself
+   - password/secret/token/key fields are generated there when the template expects a random value
+   - database-name placeholders are filled from the chosen app name
 5. `get_task_status`
 6. `get_database_connection_details`
 7. optionally `get_database_logs` when troubleshooting
 
 After provisioning a database, the assistant should proactively suggest exact env var updates for dependent apps instead of leaving the user with only a raw connection string.
+
+Marketplace template deployment through MCP now supports both:
+
+1. deploying into an existing project by `project_id`
+2. creating a new project inline by passing `project_name`
 
 | Tool | Description |
 |------|-------------|
@@ -135,6 +143,9 @@ After provisioning a database, the assistant should proactively suggest exact en
 | `get_logs` | Get app logs |
 | `get_app_logs` | Alias for getting app logs |
 | `get_app_connection_env_vars` | Get concrete connection env vars and connection strings for an app/database so dependent apps can be updated correctly |
+| `list_marketplace_templates` | List deployable marketplace templates before choosing one for a project |
+| `get_marketplace_template` | Inspect one marketplace template, including its required env vars |
+| `deploy_marketplace_template` | Deploy a marketplace template into an existing project or create a new project inline during the same MCP flow |
 | `exec_app_terminal` | Execute a command in the caller's own deployed app container |
 | `redeploy` | Redeploy an app after confirming the exact app name |
 | `restart_app` | Alias for restarting an app by redeploying it |
@@ -143,7 +154,7 @@ After provisioning a database, the assistant should proactively suggest exact en
 | `delete_deployment` | Alias for `remove_app` |
 | `list_database_templates` | List ready-to-deploy database templates |
 | `list_user_databases` | List the caller's provisioned databases, optionally by project |
-| `create_database` | Provision a database from a template after backend compute and project checks |
+| `create_database` | Provision a database from a template after backend compute and project checks, resolving password-like env vars inside the MCP flow first |
 | `get_database_connection_details` | Get connection strings, env vars, and docs for a provisioned database |
 | `get_database_logs` | Read logs from a provisioned database app |
 | `list_project_domains` | List custom domains for a project |
