@@ -25,6 +25,27 @@ def _looks_like_public_docker_hub_image(image: str) -> bool:
     return True
 
 
+def _database_family_for_image(image: str) -> str | None:
+    candidate = ((image or "").split(":")[0].split("/")[-1] or "").strip().lower()
+    if not candidate:
+        return None
+    aliases = {
+        "postgresql": "postgres",
+        "postgres": "postgres",
+        "mongo": "mongodb",
+        "mongodb": "mongodb",
+        "redis": "redis",
+        "valkey": "redis",
+        "qdrant": "qdrant",
+        "mysql": "mysql",
+        "mariadb": "mariadb",
+    }
+    for alias, canonical in aliases.items():
+        if alias in candidate:
+            return canonical
+    return None
+
+
 def _slugify(value: str) -> str:
     slug = re.sub(r"[^a-z0-9-]", "-", (value or "").strip().lower()).strip("-")
     return slug or "app"
@@ -106,6 +127,13 @@ def _compose_db_env_overrides(plan_item: dict) -> dict[str, str]:
     return overrides
 
 
+async def _check_database_slug_availability(project_id: str, slug: str, exclude_app_id: str = "") -> dict:
+    return await _client().get(
+        "/v1/plugin/databases/slug-availability/check",
+        params={"project_id": project_id, "slug": slug, "exclude_app_id": exclude_app_id or None},
+    )
+
+
 def _format_compose_plan(plan: dict) -> str:
     services = plan.get("services") or []
     lines = [
@@ -175,6 +203,16 @@ def _compose_build_commands(plan: dict, workspace_root: str, image_tag_prefix: s
             + "})`."
         )
     return "\n".join(lines)
+
+
+async def _find_database_template_for_family(family: str) -> dict | None:
+    templates_data = await _client().get("/v1/plugin/databases/templates")
+    templates = templates_data.get("templates", [])
+    for template in templates:
+        engine = ((template.get("database_config") or {}).get("engine") or "").lower()
+        if template.get("slug") == family or engine == family:
+            return template
+    return None
 
 
 def _post_deploy_suggestions(app: dict, project_apps: list[dict]) -> list[str]:
@@ -302,6 +340,52 @@ def register_deployment_tools(mcp):
     ) -> str:
         """Deploy a pullable Docker image into a project. By default, mirror it into an allowed managed registry first, except for obvious public Docker Hub images such as common databases where direct pull is usually better. For a local-only image built on the user's machine, use upload_image_archive_and_deploy() instead."""
         try:
+            database_family = _database_family_for_image(image)
+            if database_family:
+                route_slug_value = route_slug or _slugify(name)
+                template = await _find_database_template_for_family(database_family)
+                if template:
+                    resolved_overrides = _build_template_env_overrides(
+                        template,
+                        app_name=name,
+                        route_slug=route_slug_value,
+                        provided_overrides=env_vars,
+                    )
+                    routed_compute_placement = "auto" if compute_placement == "personal" else compute_placement
+                    data = await _client().post(
+                        "/v1/plugin/databases",
+                        {
+                            "template_id": template.get("id") or template.get("slug"),
+                            "project_id": project_id,
+                            "app_name": name,
+                            "route_slug": route_slug_value,
+                            "compute_placement": routed_compute_placement,
+                            "env_overrides": resolved_overrides,
+                            "cpu_limit": cpu_limit,
+                            "memory_limit": memory_limit,
+                        },
+                    )
+                    task_id = data.get("task_id")
+                    app = data.get("app", {})
+                    await _remember_context(
+                        {
+                            "last_completed_task": {
+                                "type": "create_database",
+                                "project_id": project_id,
+                                "app_id": app.get("id"),
+                                "app_name": app.get("name") or name,
+                                "route_slug": app.get("route_slug") or route_slug_value,
+                            }
+                        }
+                    )
+                    return (
+                        f"🗄️ Routed `{image}:{tag}` through the Data Layer database flow using template **{template.get('name') or template.get('slug')}**.\n"
+                        f"Database queued: **{app.get('name') or name}** (`{app.get('id')}`)\n"
+                        f"Task ID: `{task_id}`\n"
+                        f"{_fmt_task_hint(task_id)}\n"
+                        "This matches the frontend database deployment path, including template-based runtime rendering and database-specific defaults."
+                    )
+
             compute = await _get_compute_summary()
             if not compute.get("can_deploy"):
                 return f"Cannot deploy yet: {compute.get('message')}"
@@ -471,6 +555,7 @@ def register_deployment_tools(mcp):
             for item in plan.get("services") or []:
                 strategy = item.get("strategy")
                 if strategy == "database_template":
+                    routed_compute_placement = "auto" if compute_placement == "personal" else compute_placement
                     data = await _client().post(
                         "/v1/plugin/databases",
                         {
@@ -478,7 +563,7 @@ def register_deployment_tools(mcp):
                             "project_id": project_id,
                             "app_name": item.get("suggested_app_name"),
                             "route_slug": item.get("suggested_route_slug"),
-                            "compute_placement": compute_placement,
+                            "compute_placement": routed_compute_placement,
                             "env_overrides": _compose_db_env_overrides(item),
                         },
                     )
@@ -866,6 +951,13 @@ def register_deployment_tools(mcp):
             if not template:
                 return f"Database template `{template_id}` was not found."
             route_slug_value = route_slug or _slugify(app_name)
+            if project_id:
+                availability = await _check_database_slug_availability(project_id, route_slug_value)
+                if not availability.get("available"):
+                    return (
+                        f"❌ Database slug `{route_slug_value}` is not available in project `{project_id}`. "
+                        f"{availability.get('message') or 'Choose another PlugLayer slug before provisioning.'}"
+                    ).strip()
             resolved_overrides = _build_template_env_overrides(
                 template,
                 app_name=app_name,
@@ -910,6 +1002,17 @@ def register_deployment_tools(mcp):
             return _compact_error("Database provisioning failed", e)
 
     @mcp.tool()
+    async def check_database_slug_availability(project_id: str, slug: str, exclude_database_id: str = "") -> str:
+        """Check whether a database/Data Layer slug is available in a project before provisioning or renaming a database."""
+        try:
+            data = await _check_database_slug_availability(project_id, slug, exclude_database_id)
+            if data.get("available"):
+                return f"✅ Database slug `{data.get('slug')}` is available in project `{project_id}`."
+            return f"❌ Database slug `{data.get('slug')}` is not available in project `{project_id}`. {data.get('message') or ''}".strip()
+        except Exception as e:
+            return _compact_error("Error checking database slug availability", e)
+
+    @mcp.tool()
     async def get_database_connection_details(database_id: str) -> str:
         """Get a provisioned database's connection strings, env vars, and docs so you can wire other apps automatically."""
         try:
@@ -942,6 +1045,64 @@ def register_deployment_tools(mcp):
             return f"📋 **Database logs** (last {lines} lines):\n\n```\n{data.get('logs', 'No logs available')}\n```"
         except Exception as e:
             return _compact_error("Error getting database logs", e)
+
+    @mcp.tool()
+    async def update_database_access(database_id: str, tcp_allowed_cidrs: list[str] | None = None) -> str:
+        """Update a provisioned database's public TCP IP allowlist. Pass an empty list to allow all IPs again."""
+        try:
+            data = await _client().patch(
+                f"/v1/plugin/databases/{database_id}/access",
+                {"tcp_allowed_cidrs": tcp_allowed_cidrs or []},
+            )
+            cidrs = data.get("tcp_allowed_cidrs") or []
+            if cidrs:
+                return (
+                    f"🔐 Updated database access rules for `{database_id}`.\n"
+                    "Only these CIDRs/IPs can now connect:\n"
+                    + "\n".join(f"- `{cidr}`" for cidr in cidrs)
+                )
+            return (
+                f"🔓 Updated database access rules for `{database_id}`.\n"
+                "The allowlist is empty, so public TCP access is open to all IPs again."
+            )
+        except Exception as e:
+            return _compact_error("Error updating database access", e)
+
+    @mcp.tool()
+    async def restart_database(database_id: str) -> str:
+        """Restart a provisioned database by queueing its redeploy/restart flow."""
+        try:
+            data = await _client().post(f"/v1/plugin/databases/{database_id}/restart")
+            task_id = data.get("task_id")
+            await _remember_context({"last_completed_task": {"type": "restart_database", "database_id": database_id}})
+            return f"🔄 Database restart queued. Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
+        except Exception as e:
+            return _compact_error("Error restarting database", e)
+
+    @mcp.tool()
+    async def remove_database(database_id: str) -> str:
+        """Remove one of the caller's provisioned databases, including its runtime workload and active routing."""
+        try:
+            database_data = await _client().get(f"/v1/plugin/databases/{database_id}")
+            database = database_data.get("database", {})
+            await _client().delete(f"/v1/plugin/databases/{database_id}")
+            await _remember_context(
+                {
+                    "last_completed_task": {
+                        "type": "remove_database",
+                        "database_id": database_id,
+                        "database_name": database.get("name"),
+                    }
+                }
+            )
+            return f"🧹 Database **{database.get('name') or database_id}** removed. Its runtime workload and active PlugLayer routing were torn down."
+        except Exception as e:
+            return _compact_error("Error removing database", e)
+
+    @mcp.tool()
+    async def delete_database(database_id: str) -> str:
+        """Alias for remove_database()."""
+        return await remove_database(database_id)
 
     @mcp.tool()
     async def get_app_logs(app_id: str, lines: int = 100) -> str:

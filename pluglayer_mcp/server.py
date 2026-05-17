@@ -29,6 +29,7 @@ Current PlugLayer rules:
 - Async operations return task IDs; always poll get_task_status until completion.
 - Do not expose or reason from cluster-level health/state through MCP. Use only project/app/node information that belongs to the user.
 - Databases are first-class Data Layer resources. Prefer the database-specific MCP tools for template discovery, provisioning, status, connection details, and logs instead of generic app deploy flows when the user needs a standard database.
+- If the user tries to deploy a standard database image through generic image/compose tools, reroute it into the same Data Layer template flow the frontend database wizard uses instead of leaving it on the generic app path.
 - When provisioning a database or deploying a marketplace template through MCP, resolve required deploy-time env vars in the MCP flow itself. Password/secret/token/key fields that are marked or implied as randomizable should be generated there instead of leaving `{{RANDOM_*}}` placeholders unresolved.
 
 Preferred end-user deployment workflow:
@@ -47,7 +48,7 @@ Preferred end-user deployment workflow:
 13. If the project namespace already looks full or a previous app in that project is failed/crash-looping, do not continue with a brand-new app deploy by default. Refuse the separate new-app path unless the user explicitly wants that, and steer them toward update or replace flow instead.
 14. If the user wants to update an existing app, prefer redeploying/updating that app instead of creating a duplicate app in the same project. If they want a replacement, confirm that the older app may need to be deleted to free quota and avoid confusion.
 15. If the user is deploying the current repo/app, prefer the local build path first. Detect the Dockerfile and env file, create/fix them when needed, build optimized low-size architecture-agnostic images, and test the image locally. If the built image is only local to the user's machine, export it with `docker save` and use the uploaded-image deploy path; use plain deploy_image only for source images that are already pullable from an allowed listed repository.
-16. For common databases with trusted public Docker Hub images, prefer the public image directly and do not mirror/push it unless there is a strong reason. For user-facing database provisioning, prefer list_database_templates/create_database/get_database_connection_details over generic image/compose deploys.
+16. For common databases with trusted public Docker Hub images, prefer the public image directly and do not mirror/push it unless there is a strong reason. For user-facing database provisioning, prefer list_database_templates/check_database_slug_availability/create_database/get_database_connection_details over generic image/compose deploys.
 17. Temporary deployment artifacts should live under a local `.pluglayer/` folder and should be removed when no longer needed. If the agent builds and pushes a local image, it should also delete that local image afterward to free the user's disk.
 18. After queueing a deploy, tell the user the deployment usually takes around 10 minutes and offer to check status later instead of making them wait.
 19. After a successful deploy, fetch the apps in the project and suggest useful follow-up env updates such as frontend → backend URL or backend → database connection string changes. Use the app/database connection-detail tools so you can offer concrete env var values instead of vague suggestions.
@@ -57,10 +58,12 @@ Preferred end-user deployment workflow:
 23. For any database request, be autonomous:
    - check whether a suitable database already exists
    - otherwise list Data Layer templates and recommend one
+   - check the desired database slug before provisioning when a project already exists
    - resolve required database env vars before deploy, including generating real random secrets for password-like fields and filling database-name placeholders from the chosen app name
    - provision the database through Data Layer
    - poll task status until completion
    - fetch connection strings and env vars
+   - use Data Layer lifecycle tools for follow-up changes such as update_database_access, restart_database, or remove_database
    - suggest the exact env updates needed for the dependent app or apps
 24. Marketplace template deployment must support both flows:
    - deploy into an existing project when the user chose one

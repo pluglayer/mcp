@@ -101,13 +101,15 @@ Databases are a first-class **Data Layer** workflow in MCP. When a user needs a 
 1. `list_user_databases`
 2. if needed, `list_database_templates`
 3. `check_slug_availability`
-4. `create_database`
+4. optionally `check_database_slug_availability`
+5. `create_database`
    - the MCP tool resolves required deploy-time database env vars itself
    - password/secret/token/key fields are generated there when the template expects a random value
    - database-name placeholders are filled from the chosen app name
-5. `get_task_status`
-6. `get_database_connection_details`
-7. optionally `get_database_logs` when troubleshooting
+6. `get_task_status`
+7. `get_database_connection_details`
+8. optionally `get_database_logs` when troubleshooting
+9. use `update_database_access`, `restart_database`, or `remove_database` for follow-up lifecycle actions
 
 After provisioning a database, the assistant should proactively suggest exact env var updates for dependent apps instead of leaving the user with only a raw connection string.
 
@@ -157,9 +159,14 @@ Marketplace template deployment through MCP now supports both:
 | `delete_deployment` | Alias for `remove_app` |
 | `list_database_templates` | List ready-to-deploy database templates |
 | `list_user_databases` | List the caller's provisioned databases, optionally by project |
+| `check_database_slug_availability` | Check whether a Data Layer slug is free in a project before provisioning or renaming a database |
 | `create_database` | Provision a database from a template after backend compute and project checks, resolving password-like env vars inside the MCP flow first |
 | `get_database_connection_details` | Get connection strings, env vars, and docs for a provisioned database |
 | `get_database_logs` | Read logs from a provisioned database app |
+| `update_database_access` | Update the public TCP IP allowlist for a provisioned database |
+| `restart_database` | Restart a provisioned database by queueing its restart flow |
+| `remove_database` | Remove a provisioned database and tear down its runtime workload/routing |
+| `delete_database` | Alias for `remove_database` |
 | `list_project_domains` | List custom domains for a project |
 | `get_domains_by_project` | Alias for project-domain lookup; use this before asking which domain the user wants so existing project domains can be offered as options |
 | `detect_custom_domain_provider` | Detect the likely DNS/domain provider so the user can confirm it before DNS instructions are shown |
