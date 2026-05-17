@@ -4,7 +4,6 @@ import json
 import os
 import re
 import secrets
-import yaml
 
 from pluglayer_mcp.tools.shared import (
     _client,
