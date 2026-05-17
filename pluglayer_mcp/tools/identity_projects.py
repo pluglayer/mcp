@@ -159,13 +159,13 @@ def register_identity_project_tools(mcp):
 
     @mcp.tool()
     async def remove_project(project_id: str) -> str:
-        """Remove one of the authenticated user's projects from active use. PlugLayer keeps the historical record so recovery remains possible."""
+        """Remove one of the authenticated user's projects. PlugLayer removes the project's apps first, then tears down the project and archives the record for recovery/history."""
         try:
             data = await _client().delete(f"/v1/plugin/projects/{project_id}")
             await _remember_context({"last_completed_task": {"type": "remove_project", "project_id": project_id}})
             return (
                 f"🧹 Project `{project_id}` removed from active use.\n"
-                f"Apps removed or terminated: {data.get('deployments_terminated', 0)}\n"
+                f"Apps removed first: {data.get('apps_removed', data.get('deployments_terminated', 0))}\n"
                 f"Domains detached or archived: {data.get('domains_archived', 0)}"
             )
         except Exception as e:

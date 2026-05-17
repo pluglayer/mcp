@@ -791,3 +791,8 @@ def register_deployment_tools(mcp):
     async def delete_deployment(deployment_id: str) -> str:
         """Alias for remove_app() for clients still using deployment wording."""
         return await remove_app(deployment_id)
+
+    @mcp.tool()
+    async def delete_app(app_id: str) -> str:
+        """Alias for remove_app() using app wording."""
+        return await remove_app(app_id)

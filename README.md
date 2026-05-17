@@ -125,7 +125,7 @@ Marketplace template deployment through MCP now supports both:
 | `get_my_projects` | Alias for listing the current user's projects |
 | `create_project` | Create a new project namespace |
 | `get_project` | Get project details, current apps in the project, and attached custom-domain state |
-| `remove_project` | Remove one of the user's projects from active use while keeping recovery history in PlugLayer |
+| `remove_project` | Remove one of the user's projects by deleting its apps first, then archiving the project record/history |
 | `delete_project` | Alias for `remove_project` |
 | `get_compute_summary` | Show account-level personal + shared compute capacity; estimate first when sizing is still unclear |
 | `get_my_available_compute` | Show the current user's available compute capacity; pair with estimate first for planning |
@@ -151,6 +151,7 @@ Marketplace template deployment through MCP now supports both:
 | `restart_app` | Alias for restarting an app by redeploying it |
 | `rollback` | Roll back to previous version |
 | `remove_app` | Remove one of the user's apps, tear down its runtime workload, revoke active routing, and mark it as removed |
+| `delete_app` | Alias for `remove_app` |
 | `delete_deployment` | Alias for `remove_app` |
 | `list_database_templates` | List ready-to-deploy database templates |
 | `list_user_databases` | List the caller's provisioned databases, optionally by project |
