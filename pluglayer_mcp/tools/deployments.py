@@ -4,6 +4,7 @@ import json
 import os
 import re
 import secrets
+import yaml
 
 from pluglayer_mcp.tools.shared import (
     _client,
@@ -86,6 +87,95 @@ def _build_template_env_overrides(
         if resolved:
             overrides[key] = resolved
     return overrides
+
+
+def _normalize_compose_env_value(value: str) -> str | None:
+    text = (value or "").strip()
+    match = re.fullmatch(r"\$\{[A-Z0-9_]+(?::?-([^}]*))?\}", text, flags=re.IGNORECASE)
+    if match:
+        default = match.group(1)
+        return default if default is not None else None
+    return text or None
+
+
+def _compose_db_env_overrides(plan_item: dict) -> dict[str, str]:
+    overrides: dict[str, str] = {}
+    for key, value in (plan_item.get("env_vars") or {}).items():
+        normalized = _normalize_compose_env_value(str(value))
+        if normalized is not None:
+            overrides[key] = normalized
+    return overrides
+
+
+def _format_compose_plan(plan: dict) -> str:
+    services = plan.get("services") or []
+    lines = [
+        "Smart compose plan:\n",
+        f"- Database templates: {plan.get('database_template_count', 0)}",
+        f"- Separate compose apps: {plan.get('compose_service_count', 0)}",
+        f"- Local builds: {plan.get('local_build_count', 0)}",
+    ]
+    conflicts = plan.get("name_conflicts") or []
+    if conflicts:
+        lines.append(f"- Name conflicts: {', '.join(conflicts)}")
+    for item in services:
+        strategy = item.get("strategy")
+        label = {
+            "database_template": f"Data Layer ({item.get('marketplace_template_slug') or item.get('marketplace_template_name') or 'template'})",
+            "compose_service": "separate compose app",
+            "local_build_image": "local build + uploaded image",
+        }.get(strategy, strategy or "service")
+        lines.append(
+            f"- **{item.get('service_name')}** → {label} | app `{item.get('suggested_app_name')}` | slug `{item.get('suggested_route_slug')}`"
+        )
+    notes = plan.get("notes") or []
+    if notes:
+        lines.append("\nNotes:")
+        lines.extend([f"- {note}" for note in notes])
+    return "\n".join(lines)
+
+
+def _quote_shell(value: str) -> str:
+    escaped = value.replace("'", "'\"'\"'")
+    return f"'{escaped}'"
+
+
+def _compose_build_commands(plan: dict, workspace_root: str, image_tag_prefix: str) -> str:
+    services = [
+        item for item in (plan.get("services") or [])
+        if item.get("strategy") == "local_build_image"
+    ]
+    if not services:
+        return "No local-build services were detected in this compose stack."
+    root = workspace_root or "."
+    prefix = _slugify(image_tag_prefix or "pluglayer-compose")
+    lines = [
+        "Local build steps for compose services:\n",
+        f"Workspace root: `{root}`",
+    ]
+    for item in services:
+        service = item.get("service_name")
+        context = item.get("build_context") or "."
+        dockerfile = item.get("build_dockerfile")
+        tag = f"{prefix}-{_slugify(service)}:latest"
+        archive = f".pluglayer/{_slugify(service)}.tar"
+        context_path = os.path.join(root, context)
+        build_parts = ["docker", "build", "-t", tag]
+        if dockerfile:
+            build_parts.extend(["-f", os.path.join(context_path, dockerfile)])
+        build_parts.append(context_path)
+        save_parts = ["docker", "save", tag, "-o", os.path.join(root, archive)]
+        lines.append(f"\n- **{service}**")
+        lines.append(f"  Build:\n  ```sh\n{' '.join(_quote_shell(part) for part in build_parts)}\n  ```")
+        lines.append(f"  Export:\n  ```sh\n{' '.join(_quote_shell(part) for part in save_parts)}\n  ```")
+        if item.get("command_args"):
+            lines.append(f"  Startup args preserved: `{item.get('command_args')}`")
+        lines.append(
+            "  Then call `deploy_compose(..., local_image_archives={"
+            + f"\"{service}\": \"{os.path.join(root, archive)}\""
+            + "})`."
+        )
+    return "\n".join(lines)
 
 
 def _post_deploy_suggestions(app: dict, project_apps: list[dict]) -> list[str]:
@@ -202,6 +292,7 @@ def register_deployment_tools(mcp):
         tag: str = "latest",
         ports: list[int] | None = None,
         env_vars: dict[str, str] | None = None,
+        command_args: list[str] | None = None,
         replicas: int = 1,
         route_slug: str = "",
         cpu_limit: str = "500m",
@@ -227,6 +318,7 @@ def register_deployment_tools(mcp):
                     "tag": tag,
                     "ports": ports or [],
                     "env_vars": env_vars or {},
+                    "command_args": command_args or [],
                     "replicas": replicas,
                     "cpu_limit": cpu_limit,
                     "memory_limit": memory_limit,
@@ -279,6 +371,7 @@ def register_deployment_tools(mcp):
         tag: str = "latest",
         ports: list[int] | None = None,
         env_vars: dict[str, str] | None = None,
+        command_args: list[str] | None = None,
         replicas: int = 1,
         route_slug: str = "",
         cpu_limit: str = "500m",
@@ -301,6 +394,7 @@ def register_deployment_tools(mcp):
                 "registry_id": registry_id or "",
                 "ports_json": json.dumps(ports or []),
                 "env_vars_json": json.dumps(env_vars or {}),
+                "command_args_json": json.dumps(command_args or []),
                 "replicas": str(replicas),
                 "cpu_limit": cpu_limit,
                 "memory_limit": memory_limit,
@@ -344,43 +438,182 @@ def register_deployment_tools(mcp):
         app_name: str = "",
         route_slug: str = "",
         compute_placement: str = "personal",
+        local_image_archives: dict[str, str] | None = None,
     ) -> str:
-        """Deploy docker-compose.yml into a project. Use this when multiple services should run together."""
+        """Analyze docker-compose.yml, split it into separate deploy units, provision known databases through Data Layer, and deploy the remaining services as separate apps. If any service uses a local Docker build, provide `local_image_archives` keyed by service name after building and exporting those images."""
         try:
             compute = await _get_compute_summary()
             if not compute.get("can_deploy"):
                 return f"Cannot deploy yet: {compute.get('message')}"
-            data = await _client().post(
-                f"/v1/plugin/projects/{project_id}/apps",
-                {
-                    "name": app_name or "compose-app",
-                    "route_slug": route_slug or None,
-                    "compute_placement": compute_placement,
-                    "source": {"type": "compose", "compose_yaml": compose_yaml},
-                },
+            plan = await _client().post(
+                f"/v1/plugin/projects/{project_id}/apps/compose-plan",
+                {"compose_yaml": compose_yaml},
             )
-            task_id = data.get("task_id")
-            app = data.get("app", {})
-            project_apps = (await _client().get(f"/v1/plugin/projects/{project_id}/apps")).get("apps", [])
-            await _remember_context(
-                {
-                    "last_completed_task": {
-                        "type": "deploy_compose",
-                        "project_id": project_id,
-                        "app_id": app.get("id"),
-                        "app_name": app.get("name") or app_name or "compose-app",
-                    }
-                }
-            )
-            lines = [
-                f"🚀 Compose app queued (id: `{app.get('id')}`). Task ID: `{task_id}`",
-                "This usually takes around 10 minutes. Feel free to keep working and ask me to check status later.",
-                _fmt_task_hint(task_id),
+            if len(plan.get("services") or []) == 1:
+                service = plan["services"][0]
+                if app_name:
+                    service["suggested_app_name"] = _slugify(app_name)
+                if route_slug:
+                    service["suggested_route_slug"] = _slugify(route_slug)
+            missing_archives = [
+                item.get("service_name")
+                for item in (plan.get("services") or [])
+                if item.get("strategy") == "local_build_image" and not (local_image_archives or {}).get(item.get("service_name"))
             ]
-            lines.extend(_post_deploy_suggestions(app, project_apps))
+            if missing_archives:
+                return (
+                    f"{_format_compose_plan(plan)}\n\n"
+                    "Local build services still need image archives before deployment:\n"
+                    + "\n".join([f"- `{name}`" for name in missing_archives])
+                    + "\n\nBuild each service image locally, export it with `docker save`, then call deploy_compose() again with `local_image_archives={\"service\": \"/path/to/image.tar\"}`."
+                )
+
+            deployments: list[dict] = []
+            for item in plan.get("services") or []:
+                strategy = item.get("strategy")
+                if strategy == "database_template":
+                    data = await _client().post(
+                        "/v1/plugin/databases",
+                        {
+                            "template_id": item.get("marketplace_template_id") or item.get("marketplace_template_slug"),
+                            "project_id": project_id,
+                            "app_name": item.get("suggested_app_name"),
+                            "route_slug": item.get("suggested_route_slug"),
+                            "compute_placement": compute_placement,
+                            "env_overrides": _compose_db_env_overrides(item),
+                        },
+                    )
+                    deployments.append(
+                        {
+                            "service_name": item.get("service_name"),
+                            "strategy": strategy,
+                            "task_id": data.get("task_id"),
+                            "app": data.get("app", {}),
+                        }
+                    )
+                    continue
+
+                if strategy == "local_build_image":
+                    archive_path = (local_image_archives or {}).get(item.get("service_name"))
+                    if not archive_path:
+                        raise RuntimeError(f"Missing local image archive for service {item.get('service_name')}")
+                    form_data = {
+                        "name": item.get("suggested_app_name"),
+                        "tag": "latest",
+                        "route_slug": item.get("suggested_route_slug") or "",
+                        "compute_placement": compute_placement,
+                        "registry_id": "",
+                        "ports_json": json.dumps(item.get("ports") or []),
+                        "env_vars_json": json.dumps(item.get("env_vars") or {}),
+                        "command_args_json": json.dumps(item.get("command_args") or []),
+                        "replicas": "1",
+                        "cpu_limit": "500m",
+                        "memory_limit": "512Mi",
+                    }
+                    data = await _client().post_multipart(
+                        f"/v1/plugin/projects/{project_id}/apps/upload-image",
+                        form_data=form_data,
+                        file_field="archive",
+                        file_path=archive_path,
+                        content_type="application/x-tar",
+                    )
+                    deployments.append(
+                        {
+                            "service_name": item.get("service_name"),
+                            "strategy": strategy,
+                            "task_id": data.get("task_id"),
+                            "app": data.get("app", {}),
+                        }
+                    )
+                    continue
+
+                data = await _client().post(
+                    f"/v1/plugin/projects/{project_id}/apps",
+                    {
+                        "name": item.get("suggested_app_name"),
+                        "route_slug": item.get("suggested_route_slug") or None,
+                        "compute_placement": compute_placement,
+                        "source": {
+                            "type": "compose",
+                            "compose_yaml": item.get("single_service_compose_yaml") or compose_yaml,
+                        },
+                    },
+                )
+                deployments.append(
+                    {
+                        "service_name": item.get("service_name"),
+                        "strategy": strategy,
+                        "task_id": data.get("task_id"),
+                        "app": data.get("app", {}),
+                    }
+                )
+
+            if deployments:
+                await _remember_context(
+                    {
+                        "last_completed_task": {
+                            "type": "deploy_compose",
+                            "project_id": project_id,
+                            "deployments": [
+                                {
+                                    "service_name": item.get("service_name"),
+                                    "app_id": (item.get("app") or {}).get("id"),
+                                    "app_name": (item.get("app") or {}).get("name"),
+                                    "task_id": item.get("task_id"),
+                                }
+                                for item in deployments
+                            ],
+                        }
+                    }
+                )
+            lines = [
+                "🚀 Smart compose deployment queued.",
+                _format_compose_plan(plan),
+                "",
+                "Queued services:",
+            ]
+            lines.extend(
+                [
+                    f"- **{item.get('service_name')}** → `{((item.get('app') or {}).get('name') or item.get('service_name'))}` | task `{item.get('task_id')}`"
+                    for item in deployments
+                ]
+            )
+            lines.append("\nThis usually takes around 10 minutes. Feel free to keep working and ask me to check status later.")
+            task_ids = [item.get("task_id") for item in deployments if item.get("task_id")]
+            if task_ids:
+                lines.append("Task IDs: " + ", ".join(f"`{task_id}`" for task_id in task_ids))
             return "\n".join(lines)
         except Exception as e:
             return _compact_error("Compose deployment failed", e)
+
+    @mcp.tool()
+    async def analyze_compose_deploy_plan(project_id: str, compose_yaml: str) -> str:
+        """Analyze a docker-compose.yml and show how PlugLayer will split it into marketplace databases, separate compose services, and local-build services."""
+        try:
+            plan = await _client().post(
+                f"/v1/plugin/projects/{project_id}/apps/compose-plan",
+                {"compose_yaml": compose_yaml},
+            )
+            return _format_compose_plan(plan)
+        except Exception as e:
+            return _compact_error("Compose analysis failed", e)
+
+    @mcp.tool()
+    async def get_compose_local_build_commands(
+        project_id: str,
+        compose_yaml: str,
+        workspace_root: str = ".",
+        image_tag_prefix: str = "pluglayer-compose",
+    ) -> str:
+        """Analyze a docker-compose.yml and return exact docker build and docker save commands for any local-build services so they can be uploaded as image archives."""
+        try:
+            plan = await _client().post(
+                f"/v1/plugin/projects/{project_id}/apps/compose-plan",
+                {"compose_yaml": compose_yaml},
+            )
+            return _compose_build_commands(plan, workspace_root, image_tag_prefix)
+        except Exception as e:
+            return _compact_error("Compose local build analysis failed", e)
 
     @mcp.tool()
     async def get_deployment_status(deployment_id: str) -> str:

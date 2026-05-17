@@ -135,7 +135,8 @@ Marketplace template deployment through MCP now supports both:
 | `list_registries` | List the registries currently available to the user |
 | `deploy_image` | Mirror a Docker image into PlugLayer's managed Docker Hub namespace, then deploy it after backend compute checks; if a similar app already exists and the namespace is full, use update/replace flow instead of a brand-new app |
 | `upload_image_archive_and_deploy` | Upload a locally built image archive from the user's machine, push it into an allowed registry, and deploy it |
-| `deploy_compose` | Deploy from docker-compose.yml after backend compute checks; if a similar app already exists and the namespace is full, use update/replace flow instead of a brand-new app |
+| `deploy_compose` | Analyze docker-compose.yml, split it into separate deploy units, route known databases through Data Layer templates, deploy remaining services as separate apps, and require uploaded archives for local-build services |
+| `analyze_compose_deploy_plan` | Preview how PlugLayer will split a docker-compose stack into Data Layer databases, separate compose apps, and local-build image services |
 | `list_deployments` | List running apps/deployments |
 | `get_apps_by_project` | List apps inside a specific project; use this before deploy when you need to clarify update vs replace vs separate new app, especially when a full namespace should block duplicate new-app deploys |
 | `check_slug_availability` | Check whether a PlugLayer slug is free inside a project before deploy or rename |

@@ -65,6 +65,12 @@ Preferred end-user deployment workflow:
 24. Marketplace template deployment must support both flows:
    - deploy into an existing project when the user chose one
    - create a new project during template deployment when the user does not already have the right project
+25. When the user provides docker-compose:
+   - analyze it first
+   - split it into separate deploy units instead of treating it as one giant app by default
+   - for services that match standard databases such as Postgres, MongoDB, Redis, MySQL, or Qdrant, provision them through Data Layer marketplace templates
+   - for non-database services, deploy them as separate apps/pods
+   - for services with local Docker builds, build/export them locally first and then use the uploaded-image deploy path for those services
 
 Confirm destructive actions such as removing an app/project and rollback before executing them.
 """,
