@@ -1,6 +1,29 @@
-import httpx
+import json
 from typing import Optional, Any
+
+import httpx
 from pluglayer_mcp.settings import settings
+
+
+def _extract_error_detail(resp: httpx.Response) -> str:
+    text = (resp.text or "").strip()
+    try:
+        payload = resp.json()
+    except Exception:
+        return text[:500]
+
+    if isinstance(payload, dict):
+        if isinstance(payload.get("detail"), str):
+            return payload["detail"][:500]
+        if isinstance(payload.get("message"), str):
+            return payload["message"][:500]
+        data = payload.get("data")
+        if isinstance(data, dict):
+            for key in ("detail", "message", "error_message", "error"):
+                value = data.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value[:500]
+    return text[:500] or json.dumps(payload)[:500]
 
 
 class PlugLayerClient:
@@ -30,7 +53,7 @@ class PlugLayerClient:
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:
-                detail = resp.text[:500]
+                detail = _extract_error_detail(resp)
                 raise RuntimeError(f"{resp.status_code} {resp.reason_phrase}: {detail}") from exc
             if resp.status_code == 204 or not resp.content:
                 return {}
@@ -82,7 +105,7 @@ class PlugLayerClient:
                 try:
                     resp.raise_for_status()
                 except httpx.HTTPStatusError as exc:
-                    detail = resp.text[:500]
+                    detail = _extract_error_detail(resp)
                     raise RuntimeError(f"{resp.status_code} {resp.reason_phrase}: {detail}") from exc
                 if resp.status_code == 204 or not resp.content:
                     return {}

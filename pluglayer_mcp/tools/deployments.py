@@ -653,7 +653,11 @@ def register_deployment_tools(mcp):
             lines.extend(_post_deploy_suggestions(app, project_apps))
             return "\n".join(lines)
         except Exception as e:
-            return _compact_error("Uploaded image deployment failed", e)
+            return (
+                "Uploaded image deployment failed.\n\n"
+                f"Archive: `{image_archive_path}`\n"
+                f"Reason: {e}"
+            )
 
     @mcp.tool()
     async def upload_image_archive_and_redeploy_app(
@@ -688,7 +692,11 @@ def register_deployment_tools(mcp):
                 + f"Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
             )
         except Exception as e:
-            return _compact_error("Uploaded image redeploy failed", e)
+            return (
+                "Uploaded image redeploy failed.\n\n"
+                f"Archive: `{image_archive_path}`\n"
+                f"Reason: {e}"
+            )
 
     @mcp.tool()
     async def deploy_compose(
