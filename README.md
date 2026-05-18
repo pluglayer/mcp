@@ -111,7 +111,7 @@ Databases are a first-class **Data Layer** workflow in MCP. When a user needs a 
 8. optionally `get_database_logs` when troubleshooting
 9. use `update_database_access`, `restart_database`, or `remove_database` for follow-up lifecycle actions
 
-After provisioning a database, the assistant should proactively suggest exact env var updates for dependent apps instead of leaving the user with only a raw connection string.
+After provisioning a database, the assistant should proactively suggest or apply exact env var updates for dependent apps instead of leaving the user with only a raw connection string.
 
 Marketplace template deployment through MCP now supports both:
 
@@ -127,7 +127,7 @@ Marketplace template deployment through MCP now supports both:
 | `get_my_projects` | Alias for listing the current user's projects |
 | `create_project` | Create a new project namespace |
 | `get_project` | Get project details, current apps in the project, and attached custom-domain state |
-| `remove_project` | Remove one of the user's projects by deleting its apps first, then archiving the project record/history |
+| `remove_project` | Remove one of the user's projects by deleting its apps first, requesting namespace cleanup, and then archiving the project record/history |
 | `delete_project` | Alias for `remove_project` |
 | `get_compute_summary` | Show account-level personal + shared compute capacity; estimate first when sizing is still unclear |
 | `get_my_available_compute` | Show the current user's available compute capacity; pair with estimate first for planning |
@@ -137,9 +137,10 @@ Marketplace template deployment through MCP now supports both:
 | `list_registries` | List the registries currently available to the user |
 | `deploy_image` | Mirror a Docker image into PlugLayer's managed Docker Hub namespace, then deploy it after backend compute checks; if a similar app already exists and the namespace is full, use update/replace flow instead of a brand-new app |
 | `upload_image_archive_and_deploy` | Upload a locally built image archive from the user's machine, push it into an allowed registry, and deploy it |
+| `upload_image_archive_and_redeploy_app` | Upload a newly rebuilt image archive for an existing app, push it with a new tag, keep the slug unchanged, and redeploy that app |
 | `deploy_compose` | Analyze docker-compose.yml, split it into separate deploy units, route known databases through Data Layer templates, deploy remaining services as separate apps, and require uploaded archives for local-build services |
 | `analyze_compose_deploy_plan` | Preview how PlugLayer will split a docker-compose stack into Data Layer databases, separate compose apps, and local-build image services |
-| `get_compose_local_build_commands` | Generate exact `docker build` and `docker save` commands for local-build compose services so they can be uploaded and deployed |
+| `get_compose_local_build_commands` | Generate exact `docker buildx`, smoke-test, and OCI export commands for local-build compose services before they are uploaded and deployed |
 | `list_deployments` | List running apps/deployments |
 | `get_apps_by_project` | List apps inside a specific project; use this before deploy when you need to clarify update vs replace vs separate new app, especially when a full namespace should block duplicate new-app deploys |
 | `check_slug_availability` | Check whether a PlugLayer slug is free inside a project before deploy or rename |
@@ -151,7 +152,7 @@ Marketplace template deployment through MCP now supports both:
 | `get_marketplace_template` | Inspect one marketplace template, including its required env vars |
 | `deploy_marketplace_template` | Deploy a marketplace template into an existing project or create a new project inline during the same MCP flow |
 | `exec_app_terminal` | Execute a command in the caller's own deployed app container |
-| `redeploy` | Redeploy an app after confirming the exact app name |
+| `redeploy` | Redeploy an app after confirming the exact app name; the existing slug stays unchanged |
 | `restart_app` | Alias for restarting an app by redeploying it |
 | `rollback` | Roll back to previous version |
 | `remove_app` | Remove one of the user's apps, tear down its runtime workload, revoke active routing, and mark it as removed |
@@ -162,6 +163,7 @@ Marketplace template deployment through MCP now supports both:
 | `check_database_slug_availability` | Check whether a Data Layer slug is free in a project before provisioning or renaming a database |
 | `create_database` | Provision a database from a template after backend compute and project checks, resolving password-like env vars inside the MCP flow first |
 | `get_database_connection_details` | Get connection strings, env vars, and docs for a provisioned database |
+| `sync_database_env_to_app` | Patch one app's env vars from a provisioned database's concrete connection fields, then restart the existing app |
 | `get_database_logs` | Read logs from a provisioned database app |
 | `update_database_access` | Update the public TCP IP allowlist for a provisioned database |
 | `restart_database` | Restart a provisioned database by queueing its restart flow |
@@ -175,7 +177,8 @@ Marketplace template deployment through MCP now supports both:
 | `attach_custom_domain` | Attach a verified custom domain to an app |
 | `detach_custom_domain` | Detach a domain while keeping verification |
 | `get_task_status` | Poll async operation progress |
-| `generate_github_actions` | Get CI/CD pipeline YAML |
+| `inspect_local_github_repo` | Check whether the local repo has git plus a GitHub `origin` configured |
+| `generate_github_actions` | Get GitHub Actions YAML that builds a multi-arch OCI archive and uploads it to PlugLayer for the same app id |
 
 ## Example Conversations
 
@@ -186,7 +189,7 @@ Marketplace template deployment through MCP now supports both:
 > "Here's my docker-compose.yml: [paste]. Deploy this to PlugLayer."
 
 **CI/CD setup:**
-> "Generate a GitHub Actions workflow for my `api` deployment so it auto-deploys on push to main."
+> "Generate a GitHub Actions workflow for my `api` app so every push rebuilds it, uploads it to PlugLayer, and redeploys the same app id."
 
 **Add a custom domain:**
 > "Add `api.example.com` to my production project, detect the provider, show me the DNS records in a table, then verify it and attach it to my API app."
@@ -202,4 +205,4 @@ Marketplace template deployment through MCP now supports both:
 1. Go to PlugLayer Settings
 2. Create a **PlugLayer API token**
 3. Copy it once and store it safely
-4. Use it as `PLUGLAYER_API_KEY` for MCP, editor plugins, and CI/CD webhook deploys
+4. Use it as `PLUGLAYER_API_KEY` for MCP, editor plugins, and CI/CD upload-redeploy workflows

@@ -47,11 +47,13 @@ Preferred end-user deployment workflow:
 12. Before deploying into an existing project, inspect that project's current apps. List them for the user. If it already contains a likely matching app, ask whether they want to update the existing app, replace it, or add a separate new app. Include a recommended option and `[you choose]` when the choice is non-obvious.
 13. If the project namespace already looks full or a previous app in that project is failed/crash-looping, do not continue with a brand-new app deploy by default. Refuse the separate new-app path unless the user explicitly wants that, and steer them toward update or replace flow instead.
 14. If the user wants to update an existing app, prefer redeploying/updating that app instead of creating a duplicate app in the same project. If they want a replacement, confirm that the older app may need to be deleted to free quota and avoid confusion.
-15. If the user is deploying the current repo/app, prefer the local build path first. Detect the Dockerfile and env file, create/fix them when needed, build optimized low-size architecture-agnostic images, and test the image locally. If the built image is only local to the user's machine, export it with `docker save` and use the uploaded-image deploy path; use plain deploy_image only for source images that are already pullable from an allowed listed repository.
+14a. A normal redeploy/restart must not change the app's current PlugLayer slug unless the user explicitly asks for a slug change.
+15. If the user is deploying the current repo/app, prefer the local build path first. Detect the Dockerfile and env file, create/fix them when needed, build optimized low-size architecture-agnostic images, and test the image locally before upload. For compose local-build services, prefer `get_compose_local_build_commands()` so the user gets a concrete `docker buildx` test-build step and a multi-architecture OCI archive export. If the built image is only local to the user's machine, upload the OCI/Docker archive with the uploaded-image deploy path; use plain deploy_image only for source images that are already pullable from an allowed listed repository.
+15a. If the user changed code for an existing deployed app, the correct flow is: rebuild locally, use a new image tag/version, push/upload that image, then redeploy the existing app. Do not treat code changes as a plain restart of the old image.
 16. For common databases with trusted public Docker Hub images, prefer the public image directly and do not mirror/push it unless there is a strong reason. For user-facing database provisioning, prefer list_database_templates/check_database_slug_availability/create_database/get_database_connection_details over generic image/compose deploys.
 17. Temporary deployment artifacts should live under a local `.pluglayer/` folder and should be removed when no longer needed. If the agent builds and pushes a local image, it should also delete that local image afterward to free the user's disk.
 18. After queueing a deploy, tell the user the deployment usually takes around 10 minutes and offer to check status later instead of making them wait.
-19. After a successful deploy, fetch the apps in the project and suggest useful follow-up env updates such as frontend → backend URL or backend → database connection string changes. Use the app/database connection-detail tools so you can offer concrete env var values instead of vague suggestions.
+19. After a successful deploy, fetch the apps in the project and suggest or apply useful follow-up env updates such as frontend → backend URL or backend → database connection string changes. Use the app/database connection-detail tools so you can offer concrete env var values instead of vague suggestions. When the user asks for it, use the env-sync tool to patch the deployed app env vars directly and then restart the existing app instead of treating that as a brand-new deploy.
 20. When updating only env vars, explain that the app will restart/redeploy and remind the user they can ask to update env vars later any time.
 21. After completed tasks or whenever the agent learns something valuable about the user's app style or infrastructure preferences, update user context.
 22. Before deploying or renaming anything that uses the default PlugLayer URL, check whether the desired slug is already taken in that project.
@@ -72,8 +74,15 @@ Preferred end-user deployment workflow:
    - analyze it first
    - split it into separate deploy units instead of treating it as one giant app by default
    - for services that match standard databases such as Postgres, MongoDB, Redis, MySQL, or Qdrant, provision them through Data Layer marketplace templates
+   - before deploying the dependent non-database services, preview the concrete database connection details and rewrite the dependent service env vars so they point at the real deployed database host, port, and connection URLs instead of stale compose-local values
    - for non-database services, deploy them as separate apps/pods
-   - for services with local Docker builds, use the compose local-build command helper, then build/export them locally first and use the uploaded-image deploy path for those services
+   - for services with local Docker builds, use the compose local-build command helper, then test-build them locally, export architecture-agnostic OCI archives, and use the uploaded-image deploy path for those services
+26. After the first successful deploy of a repo-backed app, if the local repo has git plus a GitHub `origin`, offer GitHub Actions setup:
+   - inspect the local repo for git + `origin`
+   - generate the PlugLayer workflow for the same `app_id`
+   - write it into `.github/workflows/deploy-pluglayer.yml`
+   - tell the user to add the `PLUGLAYER_API_KEY` GitHub secret
+   - the workflow should build a multi-arch OCI archive, upload it to PlugLayer, and redeploy the same app without changing the slug
 
 Confirm destructive actions such as removing an app/project and rollback before executing them.
 """,

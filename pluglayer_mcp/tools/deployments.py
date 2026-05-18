@@ -4,7 +4,9 @@ import json
 import os
 import re
 import secrets
+from copy import deepcopy
 
+import yaml
 from pluglayer_mcp.tools.shared import (
     _client,
     _compact_error,
@@ -127,6 +129,110 @@ def _compose_db_env_overrides(plan_item: dict) -> dict[str, str]:
     return overrides
 
 
+def _field_map(fields: list[dict] | None) -> dict[str, str]:
+    return {
+        str(field.get("key")): str(field.get("value"))
+        for field in (fields or [])
+        if field.get("key") and field.get("value") is not None
+    }
+
+
+def _database_preview_maps(preview: dict) -> dict[str, dict[str, str] | str]:
+    connection_fields = _field_map(preview.get("connection_fields"))
+    env_vars = {str(key): str(value) for key, value in (preview.get("env_vars") or {}).items()}
+    engine = str((((preview.get("database") or {}).get("database_details")) or {}).get("engine") or "").lower()
+    aliases = {
+        "postgres": {"url": ["DATABASE_URL"], "host": ["PGHOST"], "port": ["PGPORT"]},
+        "mysql": {"url": ["DATABASE_URL"], "host": ["MYSQL_HOST"], "port": ["MYSQL_PORT"]},
+        "mariadb": {"url": ["DATABASE_URL"], "host": ["MYSQL_HOST"], "port": ["MYSQL_PORT"]},
+        "mongodb": {"url": ["MONGODB_URI"], "host": ["MONGO_HOST"], "port": ["MONGO_PORT"]},
+        "redis": {"url": ["REDIS_URL"], "host": ["REDIS_HOST"], "port": ["REDIS_PORT"]},
+        "qdrant": {"url": ["QDRANT_URL"], "host": ["QDRANT_HOST"], "port": ["QDRANT_PORT"]},
+    }.get(engine, {})
+
+    def pick(keys: list[str]) -> str:
+        for key in keys:
+            if connection_fields.get(key):
+                return connection_fields[key]
+            if env_vars.get(key):
+                return env_vars[key]
+        return ""
+
+    return {
+        "engine": engine,
+        "connection_fields": connection_fields,
+        "env_vars": env_vars,
+        "url": pick(aliases.get("url", [])),
+        "host": pick(aliases.get("host", [])),
+        "port": pick(aliases.get("port", [])),
+    }
+
+
+def _patch_compose_env_vars(
+    env_vars: dict[str, str],
+    *,
+    database_contexts: dict[str, dict],
+) -> tuple[dict[str, str], list[str]]:
+    if not env_vars or not database_contexts:
+        return dict(env_vars or {}), []
+    patched = dict(env_vars)
+    changed: list[str] = []
+    for key, value in list(patched.items()):
+        original = value
+        upper_key = key.upper()
+        for service_name, db_ctx in database_contexts.items():
+            field_map = db_ctx.get("connection_fields", {})
+            db_env = db_ctx.get("env_vars", {})
+            url = str(db_ctx.get("url") or "")
+            host = str(db_ctx.get("host") or "")
+            port = str(db_ctx.get("port") or "")
+            aliases = {
+                service_name.lower(),
+                str(db_ctx.get("app_name") or "").lower(),
+                str(db_ctx.get("route_slug") or "").lower(),
+            } - {""}
+            if upper_key in field_map:
+                patched[key] = field_map[upper_key]
+                break
+            if upper_key in db_env:
+                patched[key] = db_env[upper_key]
+                break
+            if upper_key.endswith("_URL") or upper_key.endswith("_URI") or upper_key == "DATABASE_URL":
+                if url and any(alias in value.lower() for alias in aliases):
+                    patched[key] = url
+                    break
+            if upper_key.endswith("_HOST") and host and any(alias == value.lower() for alias in aliases):
+                patched[key] = host
+                break
+            if upper_key.endswith("_PORT") and port and value.isdigit():
+                if any(alias in original.lower() for alias in aliases) or upper_key in field_map or upper_key in db_env:
+                    patched[key] = port
+                    break
+            if url and "://" in value and any(alias in value.lower() for alias in aliases):
+                patched[key] = url
+                break
+            if host and any(alias == value.lower() for alias in aliases):
+                patched[key] = host
+                break
+        if patched[key] != original:
+            changed.append(key)
+    return patched, changed
+
+
+def _rewrite_single_service_compose_env(compose_yaml: str, env_vars: dict[str, str]) -> str:
+    if not compose_yaml or not env_vars:
+        return compose_yaml
+    compose_data = yaml.safe_load(compose_yaml) or {}
+    services = compose_data.get("services") or {}
+    if not services:
+        return compose_yaml
+    service_name = next(iter(services))
+    service = deepcopy(services[service_name])
+    service["environment"] = dict(env_vars)
+    compose_data["services"][service_name] = service
+    return yaml.safe_dump(compose_data, sort_keys=False)
+
+
 async def _check_database_slug_availability(project_id: str, slug: str, exclude_app_id: str = "") -> dict:
     return await _client().get(
         "/v1/plugin/databases/slug-availability/check",
@@ -185,16 +291,31 @@ def _compose_build_commands(plan: dict, workspace_root: str, image_tag_prefix: s
         context = item.get("build_context") or "."
         dockerfile = item.get("build_dockerfile")
         tag = f"{prefix}-{_slugify(service)}:latest"
-        archive = f".pluglayer/{_slugify(service)}.tar"
+        test_tag = f"{prefix}-{_slugify(service)}:test"
+        archive = f".pluglayer/{_slugify(service)}.oci.tar"
         context_path = os.path.join(root, context)
-        build_parts = ["docker", "build", "-t", tag]
+        test_build_parts = ["docker", "buildx", "build", "--platform", "linux/amd64", "--load", "-t", test_tag]
+        build_parts = ["docker", "buildx", "build", "--platform", "linux/amd64,linux/arm64", "--output", f"type=oci,dest={os.path.join(root, archive)}", "-t", tag]
         if dockerfile:
+            test_build_parts.extend(["-f", os.path.join(context_path, dockerfile)])
             build_parts.extend(["-f", os.path.join(context_path, dockerfile)])
+        test_build_parts.append(context_path)
         build_parts.append(context_path)
-        save_parts = ["docker", "save", tag, "-o", os.path.join(root, archive)]
+        test_run_parts = ["docker", "run", "--rm"]
+        for key, value in (item.get("env_vars") or {}).items():
+            test_run_parts.extend(["-e", f"{key}={value}"])
+        ports = item.get("ports") or []
+        if ports:
+            port = ports[0]
+            test_run_parts.extend(["-p", f"127.0.0.1:{port}:{port}"])
+        test_run_parts.append(test_tag)
         lines.append(f"\n- **{service}**")
-        lines.append(f"  Build:\n  ```sh\n{' '.join(_quote_shell(part) for part in build_parts)}\n  ```")
-        lines.append(f"  Export:\n  ```sh\n{' '.join(_quote_shell(part) for part in save_parts)}\n  ```")
+        lines.append("  Test build first on a concrete runtime architecture:")
+        lines.append(f"  ```sh\n{' '.join(_quote_shell(part) for part in test_build_parts)}\n  ```")
+        lines.append("  Then smoke-test the image locally before uploading it:")
+        lines.append(f"  ```sh\n{' '.join(_quote_shell(part) for part in test_run_parts)}\n  ```")
+        lines.append("  If the container starts correctly, build an architecture-agnostic OCI archive for PlugLayer:")
+        lines.append(f"  ```sh\n{' '.join(_quote_shell(part) for part in build_parts)}\n  ```")
         if item.get("command_args"):
             lines.append(f"  Startup args preserved: `{item.get('command_args')}`")
         lines.append(
@@ -203,6 +324,26 @@ def _compose_build_commands(plan: dict, workspace_root: str, image_tag_prefix: s
             + "})`."
         )
     return "\n".join(lines)
+
+
+async def _preview_database_runtime(
+    *,
+    template_id: str,
+    project_id: str,
+    app_name: str,
+    route_slug: str,
+    env_overrides: dict[str, str],
+) -> dict:
+    return await _client().post(
+        "/v1/plugin/databases/preview",
+        {
+            "template_id": template_id,
+            "project_id": project_id,
+            "app_name": app_name,
+            "route_slug": route_slug,
+            "env_overrides": env_overrides,
+        },
+    )
 
 
 async def _find_database_template_for_family(family: str) -> dict | None:
@@ -225,7 +366,7 @@ def _post_deploy_suggestions(app: dict, project_apps: list[dict]) -> list[str]:
     if app_type == "database":
         for other in others:
             suggestions.append(
-                f"- Your database is deployed as **{app_name}**. Do you want me to update **{other.get('name') or 'another app'}** with the new connection string env vars?"
+                f"- Your database is deployed as **{app_name}**. I can patch **{other.get('name') or 'another app'}** with the new connection env vars using `sync_database_env_to_app()`."
             )
             break
     elif app_type in {"api", "worker"}:
@@ -462,7 +603,7 @@ def register_deployment_tools(mcp):
         compute_placement: str = "personal",
         registry_id: str = "",
     ) -> str:
-        """Upload a locally built Docker image archive (for example from `docker save`) to PlugLayer, push it into an allowed configured registry, and deploy from the mirrored image."""
+        """Upload a locally built Docker/OCI image archive to PlugLayer, push it into an allowed configured registry, and deploy from the mirrored image."""
         try:
             if not os.path.exists(image_archive_path):
                 return f"Image archive not found: {image_archive_path}"
@@ -515,6 +656,41 @@ def register_deployment_tools(mcp):
             return _compact_error("Uploaded image deployment failed", e)
 
     @mcp.tool()
+    async def upload_image_archive_and_redeploy_app(
+        app_id: str,
+        image_archive_path: str,
+        tag: str = "latest",
+        registry_id: str = "",
+    ) -> str:
+        """Rebuild flow for existing apps: upload a newly built image archive, push it with a new tag, keep the current slug, and redeploy the existing app."""
+        try:
+            if not os.path.exists(image_archive_path):
+                return f"Image archive not found: {image_archive_path}"
+            app_data = await _client().get(f"/v1/plugin/apps/{app_id}")
+            app = app_data.get("app", {})
+            data = await _client().post_multipart(
+                f"/v1/plugin/apps/{app_id}/upload-image-redeploy",
+                form_data={
+                    "tag": tag,
+                    "registry_id": registry_id or "",
+                },
+                file_field="archive",
+                file_path=image_archive_path,
+                content_type="application/x-tar",
+            )
+            task_id = data.get("task_id")
+            mirrored = data.get("mirrored_image")
+            return (
+                f"🔄 Rebuild + redeploy queued for **{app.get('name') or app_id}**.\n"
+                f"Slug kept: `{app.get('route_slug') or app.get('name')}`\n"
+                f"New image tag: `{tag}`\n"
+                + (f"Mirrored image: `{mirrored}`\n" if mirrored else "")
+                + f"Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
+            )
+        except Exception as e:
+            return _compact_error("Uploaded image redeploy failed", e)
+
+    @mcp.tool()
     async def deploy_compose(
         project_id: str,
         compose_yaml: str,
@@ -548,14 +724,27 @@ def register_deployment_tools(mcp):
                     f"{_format_compose_plan(plan)}\n\n"
                     "Local build services still need image archives before deployment:\n"
                     + "\n".join([f"- `{name}`" for name in missing_archives])
-                    + "\n\nBuild each service image locally, export it with `docker save`, then call deploy_compose() again with `local_image_archives={\"service\": \"/path/to/image.tar\"}`."
+                    + "\n\nRun `get_compose_local_build_commands()` first, follow the test-build and OCI export steps, then call deploy_compose() again with `local_image_archives={\"service\": \"/path/to/service.oci.tar\"}`."
                 )
 
             deployments: list[dict] = []
+            database_contexts: dict[str, dict] = {}
             for item in plan.get("services") or []:
                 strategy = item.get("strategy")
                 if strategy == "database_template":
                     routed_compute_placement = "auto" if compute_placement == "personal" else compute_placement
+                    resolved_overrides = _compose_db_env_overrides(item)
+                    preview = await _preview_database_runtime(
+                        template_id=item.get("marketplace_template_id") or item.get("marketplace_template_slug"),
+                        project_id=project_id,
+                        app_name=item.get("suggested_app_name"),
+                        route_slug=item.get("suggested_route_slug"),
+                        env_overrides=resolved_overrides,
+                    )
+                    preview_maps = _database_preview_maps(preview)
+                    preview_maps["app_name"] = item.get("suggested_app_name")
+                    preview_maps["route_slug"] = item.get("suggested_route_slug")
+                    database_contexts[item.get("service_name")] = preview_maps
                     data = await _client().post(
                         "/v1/plugin/databases",
                         {
@@ -564,7 +753,7 @@ def register_deployment_tools(mcp):
                             "app_name": item.get("suggested_app_name"),
                             "route_slug": item.get("suggested_route_slug"),
                             "compute_placement": routed_compute_placement,
-                            "env_overrides": _compose_db_env_overrides(item),
+                            "env_overrides": resolved_overrides,
                         },
                     )
                     deployments.append(
@@ -581,6 +770,10 @@ def register_deployment_tools(mcp):
                     archive_path = (local_image_archives or {}).get(item.get("service_name"))
                     if not archive_path:
                         raise RuntimeError(f"Missing local image archive for service {item.get('service_name')}")
+                    resolved_env_vars, rewritten_keys = _patch_compose_env_vars(
+                        item.get("env_vars") or {},
+                        database_contexts=database_contexts,
+                    )
                     form_data = {
                         "name": item.get("suggested_app_name"),
                         "tag": "latest",
@@ -588,7 +781,7 @@ def register_deployment_tools(mcp):
                         "compute_placement": compute_placement,
                         "registry_id": "",
                         "ports_json": json.dumps(item.get("ports") or []),
-                        "env_vars_json": json.dumps(item.get("env_vars") or {}),
+                        "env_vars_json": json.dumps(resolved_env_vars),
                         "command_args_json": json.dumps(item.get("command_args") or []),
                         "replicas": "1",
                         "cpu_limit": "500m",
@@ -607,10 +800,17 @@ def register_deployment_tools(mcp):
                             "strategy": strategy,
                             "task_id": data.get("task_id"),
                             "app": data.get("app", {}),
+                            "rewritten_env_keys": rewritten_keys,
                         }
                     )
                     continue
 
+                resolved_env_vars, rewritten_keys = _patch_compose_env_vars(
+                    item.get("env_vars") or {},
+                    database_contexts=database_contexts,
+                )
+                compose_yaml_to_deploy = item.get("single_service_compose_yaml") or compose_yaml
+                compose_yaml_to_deploy = _rewrite_single_service_compose_env(compose_yaml_to_deploy, resolved_env_vars)
                 data = await _client().post(
                     f"/v1/plugin/projects/{project_id}/apps",
                     {
@@ -619,7 +819,7 @@ def register_deployment_tools(mcp):
                         "compute_placement": compute_placement,
                         "source": {
                             "type": "compose",
-                            "compose_yaml": item.get("single_service_compose_yaml") or compose_yaml,
+                            "compose_yaml": compose_yaml_to_deploy,
                         },
                     },
                 )
@@ -629,6 +829,7 @@ def register_deployment_tools(mcp):
                         "strategy": strategy,
                         "task_id": data.get("task_id"),
                         "app": data.get("app", {}),
+                        "rewritten_env_keys": rewritten_keys,
                     }
                 )
 
@@ -658,7 +859,15 @@ def register_deployment_tools(mcp):
             ]
             lines.extend(
                 [
-                    f"- **{item.get('service_name')}** → `{((item.get('app') or {}).get('name') or item.get('service_name'))}` | task `{item.get('task_id')}`"
+                    (
+                        f"- **{item.get('service_name')}** → `{((item.get('app') or {}).get('name') or item.get('service_name'))}`"
+                        f" | task `{item.get('task_id')}`"
+                        + (
+                            f" | env rewired: {', '.join(f'`{key}`' for key in (item.get('rewritten_env_keys') or []))}"
+                            if item.get("rewritten_env_keys")
+                            else ""
+                        )
+                    )
                     for item in deployments
                 ]
             )
@@ -689,7 +898,7 @@ def register_deployment_tools(mcp):
         workspace_root: str = ".",
         image_tag_prefix: str = "pluglayer-compose",
     ) -> str:
-        """Analyze a docker-compose.yml and return exact docker build and docker save commands for any local-build services so they can be uploaded as image archives."""
+        """Analyze a docker-compose.yml and return exact docker buildx, smoke-test, and OCI-export commands for any local-build services before they are uploaded to PlugLayer."""
         try:
             plan = await _client().post(
                 f"/v1/plugin/projects/{project_id}/apps/compose-plan",
@@ -698,6 +907,48 @@ def register_deployment_tools(mcp):
             return _compose_build_commands(plan, workspace_root, image_tag_prefix)
         except Exception as e:
             return _compact_error("Compose local build analysis failed", e)
+
+    @mcp.tool()
+    async def sync_database_env_to_app(database_id: str, app_id: str, add_missing_connection_fields: bool = False) -> str:
+        """Update one deployed app's env vars using a provisioned database's concrete connection details, then restart the existing app."""
+        try:
+            db_data = await _client().get(f"/v1/plugin/databases/{database_id}")
+            app_data = await _client().get(f"/v1/plugin/apps/{app_id}")
+            app = app_data.get("app", {})
+            current_env = {str(key): str(value) for key, value in (app.get("env_vars") or {}).items()}
+            connection_fields = _field_map(db_data.get("connection_fields"))
+            database_env = {str(key): str(value) for key, value in (db_data.get("env_vars") or {}).items()}
+            next_env = dict(current_env)
+            changed: list[str] = []
+
+            for key, value in connection_fields.items():
+                if key in next_env or add_missing_connection_fields:
+                    if next_env.get(key) != value:
+                        next_env[key] = value
+                        changed.append(key)
+            for key, value in database_env.items():
+                if key in next_env and next_env.get(key) != value:
+                    next_env[key] = value
+                    changed.append(key)
+
+            if not changed:
+                return (
+                    f"No matching env vars needed changes on app `{app.get('name') or app_id}` "
+                    f"from database `{(db_data.get('database') or {}).get('name') or database_id}`."
+                )
+
+            await _client().patch(f"/v1/plugin/apps/{app_id}/env", {"env_vars": next_env})
+            restart_data = await _client().post(f"/v1/plugin/apps/{app_id}/restart")
+            task_id = restart_data.get("task_id")
+            return (
+                f"🔁 Updated app **{app.get('name') or app_id}** with database-derived env vars from "
+                f"**{(db_data.get('database') or {}).get('name') or database_id}**.\n"
+                f"Changed keys: {', '.join(f'`{key}`' for key in sorted(set(changed)))}\n"
+                "Action: env vars updated in place, then the existing app was restarted.\n"
+                f"Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
+            )
+        except Exception as e:
+            return _compact_error("Error syncing database env vars to app", e)
 
     @mcp.tool()
     async def get_deployment_status(deployment_id: str) -> str:
@@ -1128,7 +1379,7 @@ def register_deployment_tools(mcp):
 
     @mcp.tool()
     async def redeploy(deployment_id: str, confirmed_app_name: str) -> str:
-        """Redeploy an existing app. Confirm the exact app name with the user first and pass it here."""
+        """Redeploy an existing app without changing its current slug. Confirm the exact app name with the user first and pass it here."""
         try:
             app_data = await _client().get(f"/v1/plugin/apps/{deployment_id}")
             app = app_data.get("app", {})
@@ -1141,7 +1392,7 @@ def register_deployment_tools(mcp):
             data = await _client().post(f"/v1/plugin/apps/{deployment_id}/redeploy")
             task_id = data.get("task_id")
             await _remember_context({"last_completed_task": {"type": "redeploy", "app_id": deployment_id, "app_name": actual_name}})
-            return f"🔄 Redeployment queued for **{actual_name}**. Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
+            return f"🔄 Redeployment queued for **{actual_name}** without changing its slug. Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
         except Exception as e:
             return _compact_error("Error triggering redeploy", e)
 
