@@ -23,7 +23,18 @@ def _extract_error_detail(resp: httpx.Response) -> str:
                 value = data.get(key)
                 if isinstance(value, str) and value.strip():
                     return value[:500]
-    return text[:500] or json.dumps(payload)[:500]
+    return text[:500] or json.dumps(payload)[:500] or "No error body returned by PlugLayer API"
+
+
+def _format_request_error(exc: Exception) -> str:
+    message = str(exc).strip()
+    if message:
+        return message
+    if isinstance(exc, httpx.TimeoutException):
+        return "Request to PlugLayer timed out before a response was received"
+    if isinstance(exc, httpx.RequestError):
+        return "Network error while contacting PlugLayer API"
+    return exc.__class__.__name__
 
 
 class PlugLayerClient:
@@ -43,13 +54,16 @@ class PlugLayerClient:
 
     async def _request(self, method: str, path: str, *, params: dict = None, data: dict = None, timeout: float = 30.0) -> Any:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.request(
-                method,
-                f"{self.base_url}{path}",
-                headers=self.headers,
-                params=params,
-                json=data,
-            )
+            try:
+                resp = await client.request(
+                    method,
+                    f"{self.base_url}{path}",
+                    headers=self.headers,
+                    params=params,
+                    json=data,
+                )
+            except (httpx.TimeoutException, httpx.RequestError) as exc:
+                raise RuntimeError(_format_request_error(exc)) from exc
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:
@@ -96,12 +110,15 @@ class PlugLayerClient:
                 file_field: (file_path.split("/")[-1], fh, content_type),
             }
             async with httpx.AsyncClient(timeout=timeout) as client:
-                resp = await client.post(
-                    f"{self.base_url}{path}",
-                    headers=headers,
-                    data=form_data,
-                    files=files,
-                )
+                try:
+                    resp = await client.post(
+                        f"{self.base_url}{path}",
+                        headers=headers,
+                        data=form_data,
+                        files=files,
+                    )
+                except (httpx.TimeoutException, httpx.RequestError) as exc:
+                    raise RuntimeError(_format_request_error(exc)) from exc
                 try:
                     resp.raise_for_status()
                 except httpx.HTTPStatusError as exc:

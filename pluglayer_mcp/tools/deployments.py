@@ -17,6 +17,39 @@ from pluglayer_mcp.tools.shared import (
 )
 
 
+def _render_exception_reason(exc: Exception) -> str:
+    text = str(exc).strip()
+    if text:
+        return text
+    return getattr(exc, "message", "") or exc.__class__.__name__ or "Unknown error"
+
+
+def _task_failure_reason(task_check: dict | None) -> str:
+    if not isinstance(task_check, dict):
+        return ""
+    task = task_check.get("task") or {}
+    if (task.get("status") or "").lower() not in {"failed", "cancelled"}:
+        return ""
+    parts: list[str] = []
+    error_message = str(task.get("error_message") or "").strip()
+    if error_message:
+        parts.append(error_message)
+    status_payload = task_check.get("status") or {}
+    status_app = (status_payload.get("app") or {}) if isinstance(status_payload, dict) else {}
+    app_error = str(status_app.get("error_message") or "").strip()
+    if app_error and app_error not in parts:
+        parts.append(app_error)
+    runtime = (status_payload.get("runtime") or {}) if isinstance(status_payload, dict) else {}
+    warnings = runtime.get("warnings") or []
+    if warnings:
+        parts.append("Warnings: " + " | ".join(str(item) for item in warnings[:3] if item))
+    logs = task_check.get("logs") or {}
+    log_text = str(logs.get("logs") or "").strip() if isinstance(logs, dict) else ""
+    if log_text and log_text != "No pods found for this app":
+        parts.append("Logs: " + log_text[:500])
+    return "\n".join(parts).strip()
+
+
 def _looks_like_public_docker_hub_image(image: str) -> bool:
     candidate = (image or "").strip().lower()
     if not candidate:
@@ -656,7 +689,7 @@ def register_deployment_tools(mcp):
             return (
                 "Uploaded image deployment failed.\n\n"
                 f"Archive: `{image_archive_path}`\n"
-                f"Reason: {e}"
+                f"Reason: {_render_exception_reason(e)}"
             )
 
     @mcp.tool()
@@ -665,6 +698,7 @@ def register_deployment_tools(mcp):
         image_archive_path: str,
         tag: str = "latest",
         registry_id: str = "",
+        wait_seconds: int = 45,
     ) -> str:
         """Rebuild flow for existing apps: upload a newly built image archive, push it with a new tag, keep the current slug, and redeploy the existing app."""
         try:
@@ -677,6 +711,7 @@ def register_deployment_tools(mcp):
                 form_data={
                     "tag": tag,
                     "registry_id": registry_id or "",
+                    "wait_seconds": str(wait_seconds),
                 },
                 file_field="archive",
                 file_path=image_archive_path,
@@ -684,18 +719,31 @@ def register_deployment_tools(mcp):
             )
             task_id = data.get("task_id")
             mirrored = data.get("mirrored_image")
+            task_check = data.get("task_check") or {}
+            failure_reason = _task_failure_reason(task_check)
+            if failure_reason:
+                return (
+                    "Uploaded image redeploy failed.\n\n"
+                    f"Archive: `{image_archive_path}`\n"
+                    f"Reason: {failure_reason}"
+                )
             return (
                 f"🔄 Rebuild + redeploy queued for **{app.get('name') or app_id}**.\n"
                 f"Slug kept: `{app.get('route_slug') or app.get('name')}`\n"
                 f"New image tag: `{tag}`\n"
                 + (f"Mirrored image: `{mirrored}`\n" if mirrored else "")
-                + f"Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
+                + f"Task ID: `{task_id}`\n"
+                + (
+                    "The backend waited briefly and did not see a final failure yet.\n"
+                    if wait_seconds > 0 else ""
+                )
+                + _fmt_task_hint(task_id)
             )
         except Exception as e:
             return (
                 "Uploaded image redeploy failed.\n\n"
                 f"Archive: `{image_archive_path}`\n"
-                f"Reason: {e}"
+                f"Reason: {_render_exception_reason(e)}"
             )
 
     @mcp.tool()
