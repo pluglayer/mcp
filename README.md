@@ -192,6 +192,7 @@ Marketplace template deployment through MCP now supports both:
 > "Generate a GitHub Actions workflow for my `api` app so every push rebuilds it, uploads it to PlugLayer, and redeploys the same app id."
 
 The generated workflow expects:
+- public reusable actions from `pluglayer/actions`
 - required secrets:
   - `PLUGLAYER_API_KEY`
   - `PLUGLAYER_APP_ID`
@@ -213,4 +214,4 @@ The generated workflow expects:
 1. Go to PlugLayer Settings
 2. Create a **PlugLayer API token**
 3. Copy it once and store it safely
-4. Use it as `PLUGLAYER_API_KEY` for MCP, editor plugins, and CI/CD upload-redeploy workflows
+4. Use it as `PLUGLAYER_API_KEY` for MCP, editor plugins, and the 3-step CI/CD actions flow

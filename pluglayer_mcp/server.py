@@ -81,6 +81,7 @@ Preferred end-user deployment workflow:
    - inspect the local repo for git + `origin`
    - generate the PlugLayer workflow for the same `app_id`
    - write it into `.github/workflows/deploy-pluglayer.yml`
+   - use the public reusable actions repo `pluglayer/actions`
    - tell the user to add GitHub secrets: `PLUGLAYER_API_KEY`, `PLUGLAYER_APP_ID`, and optionally `PLUGLAYER_API_URL` plus `PLUGLAYER_APP_ENV_JSON`
    - the workflow should have three functional stages:
      1. build the multi-arch OCI archive
