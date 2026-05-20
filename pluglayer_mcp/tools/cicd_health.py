@@ -117,9 +117,18 @@ def register_cicd_health_tools(mcp):
                 f"```yaml\n{workflow}\n```\n\n"
                 "Setup steps:\n"
                 "1. Create this file in your repo.\n"
-                "2. Add `PLUGLAYER_API_KEY` as a GitHub secret.\n"
-                "3. Commit and push to `main` or `master`.\n"
-                "4. Each push will build a multi-arch OCI archive, upload it to PlugLayer, and redeploy the same app id without changing the slug."
+                "2. Add required GitHub secrets:\n"
+                "   - `PLUGLAYER_API_KEY`: your PlugLayer API token\n"
+                "   - `PLUGLAYER_APP_ID`: the existing PlugLayer app id to refresh\n"
+                "3. Optional GitHub secrets:\n"
+                "   - `PLUGLAYER_API_URL`: defaults to `https://api.pluglayer.com`\n"
+                "   - `PLUGLAYER_APP_ENV_JSON`: JSON object of env vars to merge before restart, for example `{\"API_URL\":\"https://api.example.com\",\"NEXTAUTH_SECRET\":\"...\"}`\n"
+                "4. Commit and push to `main` or `master`.\n"
+                "5. On each push the workflow will:\n"
+                "   - build a multi-arch OCI archive\n"
+                "   - upload that image to PlugLayer for the same app id\n"
+                "   - merge CI-provided env vars if present\n"
+                "   - restart the app without changing the slug"
             )
         except Exception as e:
             return _compact_error("Error generating pipeline", e)

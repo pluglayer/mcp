@@ -178,7 +178,7 @@ Marketplace template deployment through MCP now supports both:
 | `detach_custom_domain` | Detach a domain while keeping verification |
 | `get_task_status` | Poll async operation progress |
 | `inspect_local_github_repo` | Check whether the local repo has git plus a GitHub `origin` configured |
-| `generate_github_actions` | Get GitHub Actions YAML that builds a multi-arch OCI archive and uploads it to PlugLayer for the same app id |
+| `generate_github_actions` | Get GitHub Actions YAML for a 3-step PlugLayer CI/CD flow: build OCI image, upload it to the same app id, then merge env vars and restart/redeploy |
 
 ## Example Conversations
 
@@ -190,6 +190,14 @@ Marketplace template deployment through MCP now supports both:
 
 **CI/CD setup:**
 > "Generate a GitHub Actions workflow for my `api` app so every push rebuilds it, uploads it to PlugLayer, and redeploys the same app id."
+
+The generated workflow expects:
+- required secrets:
+  - `PLUGLAYER_API_KEY`
+  - `PLUGLAYER_APP_ID`
+- optional secrets:
+  - `PLUGLAYER_API_URL` (defaults to `https://api.pluglayer.com`)
+  - `PLUGLAYER_APP_ENV_JSON` (JSON object of env vars to merge before restart)
 
 **Add a custom domain:**
 > "Add `api.example.com` to my production project, detect the provider, show me the DNS records in a table, then verify it and attach it to my API app."

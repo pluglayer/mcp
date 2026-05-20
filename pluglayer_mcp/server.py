@@ -81,8 +81,11 @@ Preferred end-user deployment workflow:
    - inspect the local repo for git + `origin`
    - generate the PlugLayer workflow for the same `app_id`
    - write it into `.github/workflows/deploy-pluglayer.yml`
-   - tell the user to add the `PLUGLAYER_API_KEY` GitHub secret
-   - the workflow should build a multi-arch OCI archive, upload it to PlugLayer, and redeploy the same app without changing the slug
+   - tell the user to add GitHub secrets: `PLUGLAYER_API_KEY`, `PLUGLAYER_APP_ID`, and optionally `PLUGLAYER_API_URL` plus `PLUGLAYER_APP_ENV_JSON`
+   - the workflow should have three functional stages:
+     1. build the multi-arch OCI archive
+     2. upload it to PlugLayer for the same app id
+     3. merge CI-provided env vars if present, then restart or redeploy the app without changing the slug
 
 Confirm destructive actions such as removing an app/project and rollback before executing them.
 """,
