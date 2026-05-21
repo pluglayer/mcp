@@ -195,7 +195,6 @@ The generated workflow expects:
 - public reusable actions from `pluglayer/actions`
 - required secrets:
   - `PLUGLAYER_API_KEY`
-  - `PLUGLAYER_APP_ID`
 - optional secrets:
   - `PLUGLAYER_API_URL` (defaults to `https://api.pluglayer.com`)
   - `PLUGLAYER_BUILD_ENV_JSON` (JSON object of build-time env vars/build args to inject during image build)
