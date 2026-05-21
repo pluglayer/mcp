@@ -198,7 +198,7 @@ The generated workflow expects:
   - `PLUGLAYER_APP_ID`
 - optional secrets:
   - `PLUGLAYER_API_URL` (defaults to `https://api.pluglayer.com`)
-  - `PLUGLAYER_APP_ENV_JSON` (JSON object of env vars to merge before restart)
+  - `PLUGLAYER_BUILD_ENV_JSON` (JSON object of build-time env vars/build args to inject during image build)
 
 **Add a custom domain:**
 > "Add `api.example.com` to my production project, detect the provider, show me the DNS records in a table, then verify it and attach it to my API app."
