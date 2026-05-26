@@ -1417,7 +1417,7 @@ def register_deployment_tools(mcp):
         return await get_logs(app_id, lines)
 
     @mcp.tool()
-    async def exec_app_terminal(app_id: str, command: str, timeout_seconds: int = 20) -> str:
+    async def exec_app_terminal(app_id: str, command: str, timeout_seconds: int = 360) -> str:
         """Run a shell command inside the user's own deployed app container and return the result. This is limited to the caller's app pod only."""
         try:
             data = await _client().post(
