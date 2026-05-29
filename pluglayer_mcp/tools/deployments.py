@@ -1423,6 +1423,7 @@ def register_deployment_tools(mcp):
             data = await _client().post(
                 f"/v1/plugin/apps/{app_id}/terminal",
                 {"command": command, "timeout_seconds": timeout_seconds},
+                timeout=max(float(timeout_seconds) + 15.0, 60.0),
             )
             return (
                 f"🖥️ **App Terminal**\n"

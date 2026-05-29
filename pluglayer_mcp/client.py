@@ -79,8 +79,8 @@ class PlugLayerClient:
     async def get(self, path: str, params: dict = None) -> Any:
         return await self._request("GET", path, params=params, timeout=30.0)
 
-    async def post(self, path: str, data: dict = None, params: dict = None) -> Any:
-        return await self._request("POST", path, params=params, data=data or {}, timeout=60.0)
+    async def post(self, path: str, data: dict = None, params: dict = None, timeout: float = 60.0) -> Any:
+        return await self._request("POST", path, params=params, data=data or {}, timeout=timeout)
 
     async def delete(self, path: str) -> Any:
         return await self._request("DELETE", path, timeout=30.0)
