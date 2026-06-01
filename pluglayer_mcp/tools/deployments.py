@@ -1417,13 +1417,13 @@ def register_deployment_tools(mcp):
         return await get_logs(app_id, lines)
 
     @mcp.tool()
-    async def exec_app_terminal(app_id: str, command: str, timeout_seconds: int = 360) -> str:
-        """Run a shell command inside the user's own deployed app container and return the result. Keep input at or below 10,000 characters and about 350 lines. This is limited to the caller's app pod only."""
+    async def exec_app_terminal(app_id: str, command: str) -> str:
+        """Run a shell command inside the user's own deployed app container and return the result. Uses a fixed 360-second backend timeout. Keep input at or below 10,000 characters and about 350 lines. This is limited to the caller's app pod only."""
         try:
             data = await _client().post(
                 f"/v1/plugin/apps/{app_id}/terminal",
-                {"command": command, "timeout_seconds": timeout_seconds},
-                timeout=max(float(timeout_seconds) + 15.0, 60.0),
+                {"command": command, "timeout_seconds": 360},
+                timeout=375.0,
             )
             return (
                 f"🖥️ **App Terminal**\n"
