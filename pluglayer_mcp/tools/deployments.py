@@ -1418,7 +1418,7 @@ def register_deployment_tools(mcp):
 
     @mcp.tool()
     async def exec_app_terminal(app_id: str, command: str, timeout_seconds: int = 360) -> str:
-        """Run a shell command inside the user's own deployed app container and return the result. This is limited to the caller's app pod only."""
+        """Run a shell command inside the user's own deployed app container and return the result. Keep input at or below 10,000 characters and about 350 lines. This is limited to the caller's app pod only."""
         try:
             data = await _client().post(
                 f"/v1/plugin/apps/{app_id}/terminal",

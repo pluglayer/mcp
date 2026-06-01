@@ -151,7 +151,7 @@ Marketplace template deployment through MCP now supports both:
 | `list_marketplace_templates` | List deployable marketplace templates before choosing one for a project |
 | `get_marketplace_template` | Inspect one marketplace template, including its required env vars |
 | `deploy_marketplace_template` | Deploy a marketplace template into an existing project or create a new project inline during the same MCP flow |
-| `exec_app_terminal` | Execute a command in the caller's own deployed app container |
+| `exec_app_terminal` | Execute a command in the caller's own deployed app container; keep terminal input at or below 10,000 characters and about 350 lines |
 | `redeploy` | Redeploy an app after confirming the exact app name; the existing slug stays unchanged |
 | `restart_app` | Alias for restarting an app by redeploying it |
 | `rollback` | Roll back to previous version |
