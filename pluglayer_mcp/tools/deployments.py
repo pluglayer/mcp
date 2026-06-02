@@ -86,6 +86,30 @@ def _slugify(value: str) -> str:
     return slug or "app"
 
 
+def _find_existing_project_app_match(project_apps: list[dict] | None, *, name: str, route_slug: str) -> dict | None:
+    apps = [app for app in (project_apps or []) if isinstance(app, dict)]
+    target_name = _slugify(name)
+    target_slug = _slugify(route_slug or name)
+    if not apps:
+        return None
+
+    for app in apps:
+        app_slug = _slugify(str(app.get("route_slug") or ""))
+        if app_slug and app_slug == target_slug:
+            return app
+
+    for app in apps:
+        app_name = _slugify(str(app.get("name") or ""))
+        if app_name and app_name == target_name:
+            return app
+
+    for app in apps:
+        app_name = _slugify(str(app.get("name") or ""))
+        if app_name and app_name == target_slug:
+            return app
+    return None
+
+
 def _random_secret(length_bytes: int = 24) -> str:
     return secrets.token_hex(length_bytes)
 
@@ -636,13 +660,64 @@ def register_deployment_tools(mcp):
         compute_placement: str = "personal",
         registry_id: str = "",
     ) -> str:
-        """Upload a locally built Docker/OCI image archive to PlugLayer, push it into an allowed configured registry, and deploy from the mirrored image."""
+        """Upload a locally built Docker/OCI image archive to PlugLayer. If the target app already exists in the project, upload to that app first and redeploy it; otherwise create a new app from the mirrored image."""
         try:
             if not os.path.exists(image_archive_path):
                 return f"Image archive not found: {image_archive_path}"
             compute = await _get_compute_summary()
             if not compute.get("can_deploy"):
                 return f"Cannot deploy yet: {compute.get('message')}"
+            project_apps = (await _client().get(f"/v1/plugin/projects/{project_id}/apps")).get("apps", [])
+            existing_app = _find_existing_project_app_match(project_apps, name=name, route_slug=route_slug)
+            if existing_app and existing_app.get("id"):
+                data = await _client().post_multipart(
+                    f"/v1/plugin/apps/{existing_app.get('id')}/upload-image-redeploy",
+                    form_data={
+                        "tag": tag,
+                        "registry_id": registry_id or "",
+                        "wait_seconds": "45",
+                    },
+                    file_field="archive",
+                    file_path=image_archive_path,
+                    content_type="application/x-tar",
+                )
+                task_id = data.get("task_id")
+                mirrored = data.get("mirrored_image")
+                task_check = data.get("task_check") or {}
+                failure_reason = _task_failure_reason(task_check)
+                if failure_reason:
+                    return (
+                        "Uploaded image redeploy failed.\n\n"
+                        f"Archive: `{image_archive_path}`\n"
+                        f"Reason: {failure_reason}"
+                    )
+                await _remember_context(
+                    {
+                        "last_completed_task": {
+                            "type": "upload_image_archive_and_redeploy_app",
+                            "project_id": project_id,
+                            "app_id": existing_app.get("id"),
+                            "app_name": existing_app.get("name") or name,
+                            "route_slug": existing_app.get("route_slug") or route_slug or name,
+                        },
+                        "projects": {
+                            project_id: {
+                                "last_app_id": existing_app.get("id"),
+                                "last_app_name": existing_app.get("name") or name,
+                            }
+                        },
+                    }
+                )
+                return (
+                    f"🔄 Existing app matched, so MCP used the upload-first redeploy flow for **{existing_app.get('name') or name}**.\n"
+                    f"App ID: `{existing_app.get('id')}`\n"
+                    f"Slug kept: `{existing_app.get('route_slug') or existing_app.get('name') or name}`\n"
+                    f"New image tag: `{tag}`\n"
+                    + (f"Mirrored image: `{mirrored}`\n" if mirrored else "")
+                    + f"Task ID: `{task_id}`\n"
+                    + "This usually takes around 10 minutes. Feel free to keep working and ask me to check status later.\n"
+                    + _fmt_task_hint(task_id)
+                )
             form_data = {
                 "name": name,
                 "tag": tag,
@@ -666,7 +741,6 @@ def register_deployment_tools(mcp):
             task_id = data.get("task_id")
             app = data.get("app", {})
             mirrored = data.get("mirrored_image")
-            project_apps = (await _client().get(f"/v1/plugin/projects/{project_id}/apps")).get("apps", [])
             await _remember_context(
                 {
                     "last_completed_task": {
