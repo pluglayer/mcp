@@ -4,6 +4,48 @@ from pluglayer_mcp.domain_provider import detect_domain_provider
 from pluglayer_mcp.tools.shared import _client, _compact_error, _status_emoji
 
 
+def _normalize_dns_name(value: str) -> str:
+    return value.strip().rstrip(".").lower()
+
+
+def _provider_uses_relative_hosts(provider_name: str | None) -> bool:
+    provider = _normalize_dns_name(provider_name or "")
+    return provider in {"cloudflare", "godaddy", "namecheap", "squarespace"}
+
+
+def _provider_root_token(provider_name: str | None) -> str | None:
+    provider = _normalize_dns_name(provider_name or "")
+    if provider in {"cloudflare", "godaddy", "namecheap", "squarespace"}:
+        return "@"
+    return None
+
+
+def _provider_ui_host(record_name: str, zone_name: str, provider_name: str | None) -> str:
+    record = _normalize_dns_name(record_name)
+    zone = _normalize_dns_name(zone_name)
+    if not record or not zone:
+        return record_name
+    if not _provider_uses_relative_hosts(provider_name):
+        return record_name
+    if record == zone:
+        return _provider_root_token(provider_name) or record_name
+    suffix = f".{zone}"
+    if record.endswith(suffix):
+        return record[: -len(suffix)]
+    return record_name
+
+
+def _provider_host_display(record_name: str, zone_name: str, provider_name: str | None) -> str:
+    exact_name = record_name.strip().rstrip(".")
+    if not provider_name:
+        return f"`{exact_name}`"
+    ui_name = _provider_ui_host(record_name, zone_name, provider_name).strip()
+    if ui_name == exact_name:
+        return f"`{exact_name}`"
+    provider = provider_name.strip()
+    return f"`{ui_name}` in {provider} (`{exact_name}` exact DNS name)"
+
+
 def _provider_notes(provider_name: str | None) -> list[str]:
     provider = (provider_name or "").strip().lower()
     notes = {
@@ -12,16 +54,16 @@ def _provider_notes(provider_name: str | None) -> list[str]:
             "Cloudflare may show the root record as `@` instead of the full domain.",
         ],
         "godaddy": [
-            "GoDaddy often wants the left-hand side as `@` for root and `www` for a subdomain.",
+            "In GoDaddy's Name field, use `@` for the root domain and only the left-hand label such as `www` or `_pluglayer-verify` for subdomains.",
             "Use the exact TXT host shown by PlugLayer; do not paste the TXT value into the host field.",
         ],
         "namecheap": [
-            "Namecheap typically uses `Host` and `Value` fields and may abbreviate the root as `@`.",
+            "In Namecheap's Host field, use `@` for the root domain and only the left-hand label such as `www` or `_pluglayer-verify` for subdomains.",
             "Keep TTL on automatic/default unless you have a specific reason to change it.",
         ],
         "squarespace": [
             "Squarespace DNS may take a little longer to surface TXT changes than some providers.",
-            "Use `@` for the root if Squarespace does not accept the full hostname.",
+            "Squarespace often wants only the Host label, so use `@` for root or a short label like `_pluglayer-verify` or `www`.",
         ],
         "google cloud dns": [
             "Google DNS accepts fully qualified names cleanly; trailing dots are okay but not required in most UIs.",
@@ -47,13 +89,17 @@ def _markdown_dns_table(domain: dict, provider_name: str | None = None) -> str:
         "| Type | Name / Host | Content / Value / Target | Description |",
         "| --- | --- | --- | --- |",
     ]
-    lines.extend(f"| {rtype} | `{name}` | `{value}` | {desc or '-'} |" for rtype, name, value, desc in records)
+    lines.extend(
+        f"| {rtype} | {_provider_host_display(name, domain_name, provider_name)} | `{value}` | {desc or '-'} |"
+        for rtype, name, value, desc in records
+    )
     if provider_name:
         lines.append(f"\nDetected provider: **{provider_name}**")
         for note in _provider_notes(provider_name):
             lines.append(f"- {note}")
     else:
         lines.append("\nProvider not confirmed yet.")
+        lines.append("- If the provider uses relative Host/Name labels, use `@` for the root and strip the domain suffix from subdomain labels.")
     lines.append("\nAfter you add the records, tell me you've added them and I can verify and continue.")
     return "\n".join(lines)
 
