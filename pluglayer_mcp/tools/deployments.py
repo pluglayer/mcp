@@ -533,6 +533,7 @@ def register_deployment_tools(mcp):
         cpu_limit: str = "500m",
         memory_limit: str = "512Mi",
         compute_placement: str = "personal",
+        redeploy_strategy: str = "recreate",
         push_to_pluglayer_registry: bool = True,
         registry_id: str = "",
     ) -> str:
@@ -592,6 +593,7 @@ def register_deployment_tools(mcp):
                 "name": name,
                 "route_slug": route_slug or None,
                 "compute_placement": compute_placement,
+                "redeploy_strategy": redeploy_strategy,
                 "registry_id": registry_id or None,
                 "source": {
                     "type": "image",
@@ -658,6 +660,7 @@ def register_deployment_tools(mcp):
         cpu_limit: str = "500m",
         memory_limit: str = "512Mi",
         compute_placement: str = "personal",
+        redeploy_strategy: str = "recreate",
         registry_id: str = "",
     ) -> str:
         """Upload a locally built Docker/OCI image archive to PlugLayer. If the target app already exists in the project, upload to that app first and redeploy it; otherwise create a new app from the mirrored image."""
@@ -675,6 +678,7 @@ def register_deployment_tools(mcp):
                     form_data={
                         "tag": tag,
                         "registry_id": registry_id or "",
+                        "redeploy_strategy": redeploy_strategy,
                         "wait_seconds": "45",
                     },
                     file_field="archive",
@@ -723,6 +727,7 @@ def register_deployment_tools(mcp):
                 "tag": tag,
                 "route_slug": route_slug or "",
                 "compute_placement": compute_placement,
+                "redeploy_strategy": redeploy_strategy,
                 "registry_id": registry_id or "",
                 "ports_json": json.dumps(ports or []),
                 "env_vars_json": json.dumps(env_vars or {}),
@@ -772,6 +777,7 @@ def register_deployment_tools(mcp):
         image_archive_path: str,
         tag: str = "latest",
         registry_id: str = "",
+        redeploy_strategy: str = "recreate",
         wait_seconds: int = 45,
     ) -> str:
         """Rebuild flow for existing apps: upload a newly built image archive, push it with a new tag, keep the current slug, and redeploy the existing app."""
@@ -785,6 +791,7 @@ def register_deployment_tools(mcp):
                 form_data={
                     "tag": tag,
                     "registry_id": registry_id or "",
+                    "redeploy_strategy": redeploy_strategy,
                     "wait_seconds": str(wait_seconds),
                 },
                 file_field="archive",
@@ -827,6 +834,7 @@ def register_deployment_tools(mcp):
         app_name: str = "",
         route_slug: str = "",
         compute_placement: str = "personal",
+        redeploy_strategy: str = "recreate",
         local_image_archives: dict[str, str] | None = None,
     ) -> str:
         """Analyze docker-compose.yml, split it into separate deploy units, provision known databases through Data Layer, and deploy the remaining services as separate apps. If any service uses a local Docker build, provide `local_image_archives` keyed by service name after building and exporting those images."""
@@ -909,6 +917,7 @@ def register_deployment_tools(mcp):
                         "tag": "latest",
                         "route_slug": item.get("suggested_route_slug") or "",
                         "compute_placement": compute_placement,
+                        "redeploy_strategy": redeploy_strategy,
                         "registry_id": "",
                         "ports_json": json.dumps(item.get("ports") or []),
                         "env_vars_json": json.dumps(resolved_env_vars),
@@ -947,6 +956,7 @@ def register_deployment_tools(mcp):
                         "name": item.get("suggested_app_name"),
                         "route_slug": item.get("suggested_route_slug") or None,
                         "compute_placement": compute_placement,
+                        "redeploy_strategy": redeploy_strategy,
                         "source": {
                             "type": "compose",
                             "compose_yaml": compose_yaml_to_deploy,
@@ -1509,8 +1519,8 @@ def register_deployment_tools(mcp):
             return _compact_error("Error executing app terminal command", e)
 
     @mcp.tool()
-    async def redeploy(deployment_id: str, confirmed_app_name: str) -> str:
-        """Redeploy an existing app without changing its current slug. Confirm the exact app name with the user first and pass it here."""
+    async def redeploy(deployment_id: str, confirmed_app_name: str, redeploy_strategy: str = "recreate") -> str:
+        """Redeploy an existing app without changing its current slug. Confirm the exact app name with the user first and pass it here. Default to `recreate` to minimize temporary live compute usage; use `rolling` only when the user explicitly prefers lower-downtime rollout behavior."""
         try:
             app_data = await _client().get(f"/v1/plugin/apps/{deployment_id}")
             app = app_data.get("app", {})
@@ -1520,21 +1530,32 @@ def register_deployment_tools(mcp):
                     f"Redeploy blocked. The confirmed app name `{confirmed_app_name}` does not match the actual app name `{actual_name}`.\n"
                     "Ask the user to confirm the exact app name before redeploying."
                 )
-            data = await _client().post(f"/v1/plugin/apps/{deployment_id}/redeploy")
+            data = await _client().post(
+                f"/v1/plugin/apps/{deployment_id}/redeploy",
+                {"redeploy_strategy": redeploy_strategy},
+            )
             task_id = data.get("task_id")
             await _remember_context({"last_completed_task": {"type": "redeploy", "app_id": deployment_id, "app_name": actual_name}})
-            return f"🔄 Redeployment queued for **{actual_name}** without changing its slug. Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
+            return (
+                f"🔄 Redeployment queued for **{actual_name}** without changing its slug.\n"
+                f"Strategy: `{redeploy_strategy}`\n"
+                f"Task ID: `{task_id}`\n"
+                f"{_fmt_task_hint(task_id)}"
+            )
         except Exception as e:
             return _compact_error("Error triggering redeploy", e)
 
     @mcp.tool()
-    async def restart_app(app_id: str) -> str:
-        """Restart an app by queueing a redeploy."""
+    async def restart_app(app_id: str, redeploy_strategy: str = "recreate") -> str:
+        """Restart an app by queueing a redeploy. Default to `recreate` to optimize compute usage; use `rolling` only when lower downtime matters more than temporary headroom."""
         try:
-            data = await _client().post(f"/v1/plugin/apps/{app_id}/restart")
+            data = await _client().post(
+                f"/v1/plugin/apps/{app_id}/restart",
+                {"redeploy_strategy": redeploy_strategy},
+            )
             task_id = data.get("task_id")
             await _remember_context({"last_completed_task": {"type": "restart_app", "app_id": app_id}})
-            return f"🔄 App restart queued. Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
+            return f"🔄 App restart queued.\nStrategy: `{redeploy_strategy}`\nTask ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
         except Exception as e:
             return _compact_error("Error restarting app", e)
 
