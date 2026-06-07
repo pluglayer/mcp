@@ -5,6 +5,23 @@ import httpx
 from pluglayer_mcp.settings import settings
 
 
+def _stringify_detail(detail: Any) -> str:
+    if isinstance(detail, str):
+        return detail[:500]
+    if isinstance(detail, dict):
+        for key in ("message", "error_message", "reason", "error"):
+            value = detail.get(key)
+            if isinstance(value, str) and value.strip():
+                return value[:500]
+        task_check = detail.get("task_check")
+        if isinstance(task_check, dict):
+            task = task_check.get("task") or {}
+            value = task.get("error_message")
+            if isinstance(value, str) and value.strip():
+                return value[:500]
+    return ""
+
+
 def _extract_error_detail(resp: httpx.Response) -> str:
     text = (resp.text or "").strip()
     try:
@@ -13,25 +30,38 @@ def _extract_error_detail(resp: httpx.Response) -> str:
         return text[:500]
 
     if isinstance(payload, dict):
-        if isinstance(payload.get("detail"), str):
-            return payload["detail"][:500]
+        detail_text = _stringify_detail(payload.get("detail"))
+        if detail_text:
+            return detail_text
         if isinstance(payload.get("message"), str):
             return payload["message"][:500]
+        detail = payload.get("detail")
+        if isinstance(detail, dict):
+            data = detail.get("task_check") if isinstance(detail.get("task_check"), dict) else detail.get("data")
+            if isinstance(data, dict):
+                nested = _stringify_detail(data)
+                if nested:
+                    return nested
         data = payload.get("data")
         if isinstance(data, dict):
             for key in ("detail", "message", "error_message", "error"):
                 value = data.get(key)
-                if isinstance(value, str) and value.strip():
-                    return value[:500]
+                detail_text = _stringify_detail(value)
+                if detail_text:
+                    return detail_text
     return text[:500] or json.dumps(payload)[:500] or "No error body returned by PlugLayer API"
 
 
 def _format_request_error(exc: Exception) -> str:
+    if isinstance(exc, httpx.TimeoutException):
+        return "Request to PlugLayer timed out before a response was received"
+    if isinstance(exc, httpx.RemoteProtocolError):
+        return "PlugLayer API closed the connection unexpectedly while processing the request"
+    if isinstance(exc, (httpx.ReadError, httpx.WriteError)):
+        return "PlugLayer API connection failed while streaming the request or response body"
     message = str(exc).strip()
     if message:
         return message
-    if isinstance(exc, httpx.TimeoutException):
-        return "Request to PlugLayer timed out before a response was received"
     if isinstance(exc, httpx.RequestError):
         return "Network error while contacting PlugLayer API"
     return exc.__class__.__name__
