@@ -10,7 +10,7 @@ def test_mcp_and_plugin_python_files_stay_within_size_limit():
 
     for surface in ("pluglayer-mcp", "plugins"):
         for path in (repo_root / surface).rglob("*.py"):
-            if any(part in {".venv", "__pycache__"} for part in path.parts):
+            if any(part in {".uv-cache", ".venv", "__pycache__"} for part in path.parts):
                 continue
             line_count = len(path.read_text().splitlines())
             if line_count > MAX_PYTHON_LINES:
