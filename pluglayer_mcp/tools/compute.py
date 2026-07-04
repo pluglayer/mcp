@@ -29,6 +29,17 @@ def _fmt_usage_over_allocated(used: dict[str, Any] | None, allocated: dict[str, 
 
 
 def _fmt_catalog_node(node: dict) -> str:
+    if "node_id" in node:
+        price = node.get("monthly_price")
+        price_label = f"${price}/mo" if price is not None else "price unavailable"
+        location = node.get("datacenter_location") or "region pending"
+        availability = "available" if node.get("available") else node.get("availability_reason", "unavailable")
+        return (
+            f"- **{node.get('node_name', 'unnamed')}** (`{node.get('node_id')}`) — {price_label}\n"
+            f"  {node.get('cpu', 0)} vCPU, {node.get('ram', 0)}GB RAM, "
+            f"{node.get('storage', 0)}GB storage, {node.get('gpu', 0)}GB GPU\n"
+            f"  Location: {location} | Status: {availability}"
+        )
     hardware = node.get("hardware") or {}
     price = node.get("monthly_price")
     price_label = f"${price}/mo" if price is not None else "price unavailable"
@@ -118,16 +129,18 @@ def register_compute_tools(mcp):
                 "expected_requests_per_minute": expected_requests_per_minute,
             })
             estimation = data.get("estimation", {})
-            catalog = await _client().get(
-                "/v1/plugin/compute/catalog",
-                params={
-                    "min_cpu_cores": estimation.get("cpu"),
-                    "min_ram_gb": estimation.get("ram"),
-                    "min_storage_gb": estimation.get("storage"),
-                    "min_gpu_gb": estimation.get("gpu"),
-                },
-            )
-            nodes = catalog.get("nodes", [])
+            nodes = data.get("marketplace_nodes") or []
+            if not nodes:
+                catalog = await _client().get(
+                    "/v1/plugin/compute/catalog",
+                    params={
+                        "min_cpu_cores": estimation.get("cpu"),
+                        "min_ram_gb": estimation.get("ram"),
+                        "min_storage_gb": estimation.get("storage"),
+                        "min_gpu_gb": estimation.get("gpu"),
+                    },
+                )
+                nodes = catalog.get("nodes", [])
             suggested = nodes[:3]
             lines = [
                 "🧠 **Estimated Compute**\n"
@@ -138,9 +151,9 @@ def register_compute_tools(mcp):
                 f"Estimated monthly price: ${data.get('estimated_price_per_month')}\n"
             ]
             if suggested:
-                lines.append("\nClosest available PlugLayer compute options right now:")
+                lines.append("\nSuggested PlugLayer node bundle right now:")
                 lines.extend(_fmt_catalog_node(node) for node in suggested)
-                lines.append("\nPick one of those if it fits, or use the tailored compute offer page for a fuller purchase flow:")
+                lines.append("\nUse the offer page to confirm availability and pay for all selected nodes together:")
             else:
                 lines.append("\nNo current PlugLayer marketplace option fully meets that floor yet. Use the tailored compute offer page to request the right shape:")
             lines.append(f"Get or confirm your compute here: {data.get('quota_link')}\n")
