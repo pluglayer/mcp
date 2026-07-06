@@ -50,9 +50,12 @@ def register_identity_project_tools(mcp):
             lines = ["Your projects:\n"]
             for p in projects:
                 status = p.get("status", "unknown")
+                role = p.get("access_role") or ("owner" if p.get("is_owner", True) else "read")
+                scope = "shared with me" if p.get("shared_with_me") else "owned"
+                action_hint = "read/write actions allowed" if role in {"owner", "write"} else "read-only"
                 lines.append(
                     f"{_status_emoji(status)} **{p.get('name')}** (id: `{p.get('id')}`)\n"
-                    f"   Status: {status} | Apps: {p.get('deployment_count', 0)}\n"
+                    f"   Status: {status} | Apps: {p.get('deployment_count', 0)} | Access: {role} ({scope}; {action_hint})\n"
                     f"   Namespace: `{p.get('namespace')}`\n"
                     f"   URL pattern: {p.get('base_url', 'N/A')}\n"
                 )
@@ -118,10 +121,12 @@ def register_identity_project_tools(mcp):
             domains_payload = await _client().get(f"/v1/plugin/projects/{project_id}/domains")
             domains = domains_payload.get("domains", [])
             status = p.get("status", "unknown")
+            role = p.get("access_role") or ("owner" if p.get("is_owner", True) else "read")
             lines = [
                 f"{_status_emoji(status)} **{p.get('name')}**\n"
                 f"ID: `{p.get('id')}`\n"
                 f"Status: {status}\n"
+                f"Access: {role}{' (shared with me)' if p.get('shared_with_me') else ' (owned)'}\n"
                 f"Namespace: `{p.get('namespace')}`\n"
                 f"URL pattern: {p.get('base_url', 'N/A')}\n"
                 f"Apps: {p.get('deployment_count', 0)}"
