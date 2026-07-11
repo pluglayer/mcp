@@ -28,6 +28,30 @@ def _fmt_usage_over_allocated(used: dict[str, Any] | None, allocated: dict[str, 
     )
 
 
+def _fmt_project_scope(scope: dict[str, Any] | None) -> list[str]:
+    """Format the project-scoped compute block returned for project_id queries."""
+    if not scope:
+        return []
+    lines = [
+        f"\n📁 **Project scope: {scope.get('project_name')}**",
+        f"Nodes attached to this project: {scope.get('node_count', 0)}",
+        (
+            "Project usage: "
+            f"{_fmt_usage_over_allocated(scope.get('used'), scope.get('capacity'))}"
+            + (" (capacity includes the user's shared reservation)" if scope.get("includes_shared_reservation") else "")
+        ),
+    ]
+    for node in scope.get("nodes") or []:
+        kind = "shared" if node.get("is_shared") else "dedicated"
+        used = node.get("used_by_project") or {}
+        lines.append(
+            f"- {node.get('node_name')} ({kind}, {node.get('status')}): "
+            f"{_compute_value(used, 'cpu_cores')} CPU / {_compute_value(used, 'ram_gb')}GB RAM used by this project, "
+            f"{len(node.get('apps') or [])} app(s)"
+        )
+    return lines
+
+
 def _fmt_catalog_node(node: dict) -> str:
     if "node_id" in node:
         price = node.get("monthly_price")
@@ -59,10 +83,10 @@ def register_compute_tools(mcp):
 
 
     @mcp.tool()
-    async def get_compute_summary() -> str:
-        """Show accessible account-level compute. If the user is still planning capacity, prefer estimate_compute() first, then use the returned offer link to purchase or request the right amount."""
+    async def get_compute_summary(project_id: str = "") -> str:
+        """Show accessible compute. Pass project_id for a project-scoped view that includes the nodes attached to that project and per-node usage. If the user is still planning capacity, prefer estimate_compute() first, then use the returned offer link to purchase or request the right amount."""
         try:
-            data = await _get_compute_summary()
+            data = await _get_compute_summary(project_id=project_id or None)
             counts = data.get("counts", {})
             lines = [
                 "🧮 **Compute Summary**",
@@ -85,6 +109,7 @@ def register_compute_tools(mcp):
                 ),
                 f"Personal compute available: {_fmt_compute(data.get('available_personal_compute'))}",
             ]
+            lines.extend(_fmt_project_scope(data.get("project")))
             purchase = data.get("purchase") or {}
             if purchase.get("message"):
                 lines.append(f"Purchase: {purchase['message']}")
@@ -164,10 +189,39 @@ def register_compute_tools(mcp):
 
 
     @mcp.tool()
+    async def get_shared_compute_pricing() -> str:
+        """Show the admin-defined unit pricing for shared compute reservations plus the currently unreserved shared pool. Read-only: direct the user to the PlugLayer web app (Compute -> Add Compute -> Buy shared compute) to actually purchase a reservation."""
+        try:
+            data = await _client().get("/v1/plugin/compute/shared/pricing")
+            pricing = data.get("pricing") or {}
+            pool = data.get("pool_available") or {}
+            if not pricing.get("enabled"):
+                return (
+                    "Shared compute purchasing is not enabled yet. An admin must configure shared pricing "
+                    "in Admin -> Compute -> Shared Compute Pricing first."
+                )
+            currency = pricing.get("currency", "USD")
+            return "\n".join(
+                [
+                    "💳 **Shared Compute Pricing** (monthly)",
+                    f"Per CPU core: {currency} {pricing.get('price_per_cpu_core', 0)}",
+                    f"Per GB RAM: {currency} {pricing.get('price_per_ram_gb', 0)}",
+                    f"Per 10GB storage: {currency} {pricing.get('price_per_storage_10gb', 0)}",
+                    f"Per GB GPU: {currency} {pricing.get('price_per_gpu_gb', 0)}",
+                    f"Unreserved shared pool right now: {_fmt_compute(pool)}",
+                    "Purchase in the PlugLayer app: Compute -> Add Compute -> Buy shared compute.",
+                ]
+            )
+        except Exception as e:
+            return _compact_error("Error loading shared compute pricing", e)
+
+
+    @mcp.tool()
     async def list_nodes(project_id: str = "") -> str:
         """
         List compute nodes accessible to the authenticated user.
-        Compute is account-level; project_id is accepted only for backwards compatibility.
+        Pass project_id to list only the nodes backing that project (a dedicated
+        node serves one project; shared nodes serve many projects at once).
         """
         try:
             params = {"project_id": project_id} if project_id else {}
