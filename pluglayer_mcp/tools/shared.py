@@ -49,8 +49,9 @@ def _compact_error(prefix: str, exc: Exception) -> str:
     return f"{prefix}: {exc}"
 
 
-async def _get_compute_summary() -> dict[str, Any]:
-    return await _client().get("/v1/plugin/compute")
+async def _get_compute_summary(project_id: str | None = None) -> dict[str, Any]:
+    params = {"project_id": project_id} if project_id else None
+    return await _client().get("/v1/plugin/compute", params=params)
 
 
 async def _remember_context(context_patch: dict[str, Any], merge: bool = True) -> None:
