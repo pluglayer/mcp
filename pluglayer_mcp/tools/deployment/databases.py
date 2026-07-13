@@ -91,6 +91,13 @@ def register_databases_tools(mcp):
         try:
             if not project_id and not project_name:
                 return "Database provisioning needs either `project_id` or `project_name`."
+            compute = await _get_compute_summary(project_id=project_id or None)
+            if not compute.get("can_deploy"):
+                suffix = (
+                    " Use list_attachable_project_nodes() and attach_node_to_project(), or help the user add compute, then retry."
+                    if project_id else " Help the user add compute before provisioning into the new project."
+                )
+                return f"Cannot provision the database yet: {compute.get('message')}{suffix}"
             templates_data = await _client().get("/v1/plugin/databases/templates")
             templates = templates_data.get("templates", [])
             template = next(
@@ -256,4 +263,3 @@ def register_databases_tools(mcp):
     async def delete_database(database_id: str) -> str:
         """Alias for remove_database()."""
         return await remove_database(database_id)
-

@@ -34,9 +34,15 @@ def _fmt_compute(compute: dict[str, Any] | None) -> str:
 def _fmt_node(node: dict[str, Any]) -> str:
     status = node.get("status", "unknown")
     owner = "shared PlugLayer" if node.get("is_shared") else "personal"
+    project = (
+        "shared across projects"
+        if node.get("is_shared")
+        else node.get("project_name") or node.get("project_slug") or node.get("project_id") or "not attached"
+    )
     return (
         f"{_status_emoji(status)} **{node.get('name', 'unnamed')}** (id: `{node.get('id')}`)\n"
         f"   Provider: {node.get('provider')} | Status: {status} | Scope: {owner}\n"
+        f"   Project: {project}\n"
         f"   Compute: {_fmt_compute(node.get('hardware'))}\n"
     )
 
