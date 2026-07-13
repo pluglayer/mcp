@@ -99,9 +99,12 @@ def register_images_tools(mcp):
                         "This matches the frontend database deployment path, including template-based runtime rendering and database-specific defaults."
                     )
 
-            compute = await _get_compute_summary()
+            compute = await _get_compute_summary(project_id=project_id)
             if not compute.get("can_deploy"):
-                return f"Cannot deploy yet: {compute.get('message')}"
+                return (
+                    f"Cannot deploy into project `{project_id}` yet: {compute.get('message')} "
+                    "Use list_attachable_project_nodes() and attach_node_to_project(), or help the user add compute, then retry."
+                )
             should_mirror = push_to_pluglayer_registry and not _looks_like_public_docker_hub_image(image)
             payload = {
                 "name": name,
@@ -181,9 +184,12 @@ def register_images_tools(mcp):
         try:
             if not os.path.exists(image_archive_path):
                 return f"Image archive not found: {image_archive_path}"
-            compute = await _get_compute_summary()
+            compute = await _get_compute_summary(project_id=project_id)
             if not compute.get("can_deploy"):
-                return f"Cannot deploy yet: {compute.get('message')}"
+                return (
+                    f"Cannot deploy into project `{project_id}` yet: {compute.get('message')} "
+                    "Use list_attachable_project_nodes() and attach_node_to_project(), or help the user add compute, then retry."
+                )
             project_apps = (await _client().get(f"/v1/plugin/projects/{project_id}/apps")).get("apps", [])
             existing_app = _find_existing_project_app_match(project_apps, name=name, route_slug=route_slug)
             if existing_app and existing_app.get("id"):
@@ -340,4 +346,3 @@ def register_images_tools(mcp):
                 f"Archive: `{image_archive_path}`\n"
                 f"Reason: {_render_exception_reason(e)}"
             )
-
