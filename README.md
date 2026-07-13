@@ -129,11 +129,14 @@ Marketplace template deployment through MCP now supports both:
 | `get_project` | Get project details, current apps in the project, and attached custom-domain state |
 | `remove_project` | Remove one of the user's projects by deleting its apps first, requesting namespace cleanup, and then archiving the project record/history |
 | `delete_project` | Alias for `remove_project` |
-| `get_compute_summary` | Show account-level personal + shared compute capacity; estimate first when sizing is still unclear |
+| `get_compute_summary` | Show account-level capacity, or pass `project_id` for attached-node capacity and usage; estimate first when sizing is unclear |
 | `get_my_available_compute` | Show the current user's available compute capacity; pair with estimate first for planning |
 | `get_my_available_computes` | Alias for available compute capacity |
 | `estimate_compute` | Estimate required compute, monthly price, and a tailored offer link; preferred before purchase/allocation decisions |
 | `list_nodes` | List accessible compute nodes |
+| `list_attachable_project_nodes` | List owner-held dedicated nodes and their project attachment state |
+| `attach_node_to_project` | Attach an available dedicated node to one project (owner-only, idempotent) |
+| `detach_node_from_project` | Detach an unused dedicated node after explicit confirmation; active apps block it |
 | `list_registries` | List the registries currently available to the user |
 | `deploy_image` | Mirror a Docker image into PlugLayer's managed Docker Hub namespace, then deploy it after backend compute checks; if a similar app already exists and the namespace is full, use update/replace flow instead of a brand-new app |
 | `upload_image_archive_and_deploy` | Upload a locally built image archive from the user's machine; if the target app already exists, switch to the app upload-first redeploy flow, otherwise create and deploy a new app |

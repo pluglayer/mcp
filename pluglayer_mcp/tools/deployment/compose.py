@@ -45,9 +45,12 @@ def register_compose_tools(mcp):
     ) -> str:
         """Analyze docker-compose.yml, split it into separate deploy units, provision known databases through Data Layer, and deploy the remaining services as separate apps. If any service uses a local Docker build, provide `local_image_archives` keyed by service name after building and exporting those images."""
         try:
-            compute = await _get_compute_summary()
+            compute = await _get_compute_summary(project_id=project_id)
             if not compute.get("can_deploy"):
-                return f"Cannot deploy yet: {compute.get('message')}"
+                return (
+                    f"Cannot deploy into project `{project_id}` yet: {compute.get('message')} "
+                    "Use list_attachable_project_nodes() and attach_node_to_project(), or help the user add compute, then retry."
+                )
             plan = await _client().post(
                 f"/v1/plugin/projects/{project_id}/apps/compose-plan",
                 {"compose_yaml": compose_yaml},
@@ -253,4 +256,3 @@ def register_compose_tools(mcp):
             return _compose_build_commands(plan, workspace_root, image_tag_prefix)
         except Exception as e:
             return _compact_error("Compose local build analysis failed", e)
-

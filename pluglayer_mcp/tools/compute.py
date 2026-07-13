@@ -228,12 +228,67 @@ def register_compute_tools(mcp):
             data = await _client().get("/v1/plugin/compute/nodes", params=params)
             nodes = data.get("nodes", [])
             if not nodes:
+                if project_id:
+                    return (
+                        f"No compute nodes are attached to project `{project_id}`. "
+                        "Call list_attachable_project_nodes(), attach an available node with attach_node_to_project(), "
+                        "or help the user add/purchase compute before deploying."
+                    )
                 return "No accessible compute nodes found yet. If the user needs capacity, prefer estimate_compute() and the PlugLayer compute marketplace before discussing self-managed nodes."
             lines = ["Accessible compute nodes:\n"]
             lines.extend(_fmt_node(n) for n in nodes)
             return "\n".join(lines)
         except Exception as e:
             return _compact_error("Error listing compute nodes", e)
+
+
+    @mcp.tool()
+    async def list_attachable_project_nodes(project_id: str) -> str:
+        """List the authenticated project owner's dedicated nodes and whether each is available, already attached here, or attached to another project. Use this when project compute is missing before a deploy."""
+        try:
+            data = await _client().get(f"/v1/plugin/projects/{project_id}/compute/attachable")
+            nodes = data.get("nodes") or []
+            if not nodes:
+                return (
+                    f"No dedicated nodes exist for project owner of `{project_id}` yet. "
+                    "Help the user estimate and add compute in the PlugLayer web app, then check again."
+                )
+            lines = [f"Dedicated node attachment options for project `{project_id}`:"]
+            for node in nodes:
+                state = node.get("attachment_state", "unknown").replace("_", " ")
+                project = f" | current project: `{node.get('project_id')}`" if node.get("project_id") else ""
+                lines.append(f"{_fmt_node(node).rstrip()}   Attachment: {state}{project}\n")
+            lines.append("Only nodes marked available can be attached. A dedicated node can belong to one project at a time.")
+            return "\n".join(lines)
+        except Exception as e:
+            return _compact_error("Error listing attachable project nodes", e)
+
+
+    @mcp.tool()
+    async def attach_node_to_project(project_id: str, node_id: str) -> str:
+        """Attach one available dedicated node to a project. Owner-only and idempotent. After attaching, call get_compute_summary(project_id) before deploying."""
+        try:
+            data = await _client().post(f"/v1/plugin/projects/{project_id}/compute/nodes/{node_id}/attach", {})
+            node = data.get("node") or {}
+            return (
+                f"✅ {data.get('message') or 'Node attached.'}\n"
+                f"Project: `{project_id}`\nNode: **{node.get('name')}** (`{node.get('id')}`)\n"
+                "Next: call get_compute_summary(project_id) and deploy only when it reports enough project-scoped capacity."
+            )
+        except Exception as e:
+            return _compact_error("Error attaching node to project", e)
+
+
+    @mcp.tool()
+    async def detach_node_from_project(project_id: str, node_id: str, confirm: bool = False) -> str:
+        """Detach a dedicated node from a project. Active apps block detachment. Set confirm=true only after the user explicitly confirms this change."""
+        if not confirm:
+            return "Confirmation required. Ask the user, then call detach_node_from_project(..., confirm=true)."
+        try:
+            data = await _client().delete(f"/v1/plugin/projects/{project_id}/compute/nodes/{node_id}")
+            return f"✅ {data.get('message') or 'Node detached.'} Project `{project_id}`, node `{node_id}`."
+        except Exception as e:
+            return _compact_error("Error detaching node from project", e)
 
 
     @mcp.tool()

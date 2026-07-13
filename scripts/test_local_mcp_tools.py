@@ -41,6 +41,12 @@ READ_ONLY_TOOLS: tuple[tuple[str, dict[str, Any]], ...] = (
     ("list_deployments", {}),
 )
 
+EXPECTED_TOOL_NAMES = {
+    "list_attachable_project_nodes",
+    "attach_node_to_project",
+    "detach_node_from_project",
+}
+
 
 @dataclass(slots=True)
 class BackendFixtures:
@@ -220,7 +226,7 @@ async def run_smoke_test(require_all: bool, include_mutations: bool) -> int:
     tools = await tester.list_tools()
     tool_names = {tool.name for tool in tools}
 
-    expected_tools = {name for name, _args in READ_ONLY_TOOLS}
+    expected_tools = {name for name, _args in READ_ONLY_TOOLS} | EXPECTED_TOOL_NAMES
     missing = sorted(expected_tools - tool_names)
     if missing:
         print("Missing expected MCP tools:")
