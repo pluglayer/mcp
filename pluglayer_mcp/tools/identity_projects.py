@@ -171,7 +171,7 @@ def register_identity_project_tools(mcp):
             return (
                 f"🧹 Project `{project_id}` removed from active use.\n"
                 f"Apps removed first: {data.get('apps_removed', data.get('deployments_terminated', 0))}\n"
-                f"Domains detached or archived: {data.get('domains_archived', 0)}\n"
+                f"Domains detached: {data.get('domains_detached', data.get('domains_archived', 0))}\n"
                 f"Namespace cleanup requested: {((data.get('cleanup') or {}).get('namespace_deleted'))}"
             )
         except Exception as e:
