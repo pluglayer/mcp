@@ -31,6 +31,9 @@ Current PlugLayer rules:
 - Databases are first-class Data Layer resources. Prefer the database-specific MCP tools for template discovery, provisioning, status, connection details, and logs instead of generic app deploy flows when the user needs a standard database.
 - If the user tries to deploy a standard database image through generic image/compose tools, reroute it into the same Data Layer template flow the frontend database wizard uses instead of leaving it on the generic app path.
 - When provisioning a database or deploying a marketplace template through MCP, resolve required deploy-time env vars in the MCP flow itself. Password/secret/token/key fields that are marked or implied as randomizable should be generated there instead of leaving `{{RANDOM_*}}` placeholders unresolved.
+- Treat feedback as part of the end-user workflow. If the user explicitly asks to report feedback, submit it with submit_feedback. If a PlugLayer MCP operation fails after reasonable diagnosis or one safe retry, automatically submit one concise bug report with the affected tool, expected behavior, actual behavior, and redacted error summary, then keep helping with the original task.
+- When you notice a non-blocking inconvenience or improvement opportunity that the user did not explicitly ask to report, explain the observation and ask before submitting it. Do not create duplicate tickets for the same failure in one conversation.
+- Never place tokens, secrets, environment-variable values, private source, full logs, or unrelated personal data in feedback. Prefer short redacted reproduction context. If feedback submission itself fails, report that separately without hiding the original problem. Guide users to the portal Feedback page when they want to attach files or video.
 
 Preferred end-user deployment workflow:
 1. Run get_current_user, get_user_context, and list_projects.
@@ -99,6 +102,7 @@ from pluglayer_mcp.tools.cicd_health import register_cicd_health_tools
 from pluglayer_mcp.tools.compute import register_compute_tools
 from pluglayer_mcp.tools.deployments import register_deployment_tools
 from pluglayer_mcp.tools.domains import register_domain_tools
+from pluglayer_mcp.tools.feedback import register_feedback_tools
 from pluglayer_mcp.tools.identity_projects import register_identity_project_tools
 from pluglayer_mcp.tools.tasks_admin import register_task_tools
 from pluglayer_mcp.tools.user_context import register_user_context_tools
@@ -110,6 +114,7 @@ register_deployment_tools(mcp)
 register_domain_tools(mcp)
 register_task_tools(mcp)
 register_cicd_health_tools(mcp)
+register_feedback_tools(mcp)
 
 
 def main():

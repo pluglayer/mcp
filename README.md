@@ -82,6 +82,7 @@ After publishing:
    - `get_current_user`
    - `list_projects`
    - `get_compute_summary`
+   - `list_my_feedback`
 
 ## Cursor Notes
 
@@ -123,6 +124,9 @@ Marketplace template deployment through MCP now supports both:
 | `get_current_user` | Show the Authentik-backed user and `roles` |
 | `get_user_context` | Load the caller's stored user memory/context |
 | `update_user_context` | Update the caller's stored user memory/context |
+| `submit_feedback` | Submit authenticated, redacted product feedback with optional affected-tool, expected/actual behavior, error, and page context |
+| `list_my_feedback` | List the authenticated user's feedback tickets and statuses |
+| `get_feedback` | Inspect one feedback ticket and its current resolution note |
 | `list_projects` | List authenticated user's projects |
 | `get_my_projects` | Alias for listing the current user's projects |
 | `create_project` | Create a new project namespace |
