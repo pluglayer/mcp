@@ -112,6 +112,33 @@ class PlugLayerClient:
     async def post(self, path: str, data: dict = None, params: dict = None, timeout: float = 60.0) -> Any:
         return await self._request("POST", path, params=params, data=data or {}, timeout=timeout)
 
+    async def post_form(self, path: str, data: dict[str, Any], timeout: float = 60.0) -> Any:
+        """POST an application/x-www-form-urlencoded body to a PlugLayer endpoint."""
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "User-Agent": "pluglayer-mcp/0.1.0",
+        }
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            try:
+                resp = await client.post(
+                    f"{self.base_url}{path}",
+                    headers=headers,
+                    data=data,
+                )
+            except (httpx.TimeoutException, httpx.RequestError) as exc:
+                raise RuntimeError(_format_request_error(exc)) from exc
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                detail = _extract_error_detail(resp)
+                raise RuntimeError(f"{resp.status_code} {resp.reason_phrase}: {detail}") from exc
+            if resp.status_code == 204 or not resp.content:
+                return {}
+            payload = resp.json()
+            if isinstance(payload, dict) and payload.get("ok") is True and "data" in payload:
+                return payload["data"]
+            return payload
+
     async def delete(self, path: str) -> Any:
         return await self._request("DELETE", path, timeout=30.0)
 
