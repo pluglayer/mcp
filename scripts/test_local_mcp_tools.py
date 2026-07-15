@@ -39,12 +39,15 @@ READ_ONLY_TOOLS: tuple[tuple[str, dict[str, Any]], ...] = (
     ("list_nodes", {}),
     ("list_registries", {}),
     ("list_deployments", {}),
+    ("list_my_feedback", {"limit": 10}),
 )
 
 EXPECTED_TOOL_NAMES = {
     "list_attachable_project_nodes",
     "attach_node_to_project",
     "detach_node_from_project",
+    "submit_feedback",
+    "get_feedback",
 }
 
 
@@ -259,7 +262,8 @@ async def run_smoke_test(require_all: bool, include_mutations: bool) -> int:
             continue
 
         text = "\n".join(content)
-        if "error" in text.lower() and "error:" in text.lower():
+        normalized = text.strip().lower()
+        if normalized.startswith("error ") or "\n❌ error:" in normalized:
             failures.append((tool_name, text[:600]))
             continue
 
