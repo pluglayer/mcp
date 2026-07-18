@@ -50,16 +50,6 @@ def _task_failure_reason(task_check: dict | None) -> str:
     return "\n".join(parts).strip()
 
 
-def _looks_like_public_docker_hub_image(image: str) -> bool:
-    candidate = (image or "").strip().lower()
-    if not candidate:
-        return False
-    first = candidate.split("/", 1)[0]
-    if "." in first or ":" in first:
-        return first in {"docker.io", "index.docker.io", "registry-1.docker.io"}
-    return True
-
-
 def _database_family_for_image(image: str) -> str | None:
     candidate = ((image or "").split(":")[0].split("/")[-1] or "").strip().lower()
     if not candidate:
@@ -441,5 +431,4 @@ def _post_deploy_suggestions(app: dict, project_apps: list[dict]) -> list[str]:
                 )
                 break
     return suggestions
-
 
