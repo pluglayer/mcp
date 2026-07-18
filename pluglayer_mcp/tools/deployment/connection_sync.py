@@ -14,7 +14,6 @@ from pluglayer_mcp.tools.deployment.helpers import (
     _find_database_template_for_family,
     _find_existing_project_app_match,
     _format_compose_plan,
-    _looks_like_public_docker_hub_image,
     _patch_compose_env_vars,
     _post_deploy_suggestions,
     _preview_database_runtime,
@@ -74,4 +73,3 @@ def register_connection_sync_tools(mcp):
             )
         except Exception as e:
             return _compact_error("Error syncing database env vars to app", e)
-

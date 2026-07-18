@@ -14,7 +14,6 @@ from pluglayer_mcp.tools.deployment.helpers import (
     _find_database_template_for_family,
     _find_existing_project_app_match,
     _format_compose_plan,
-    _looks_like_public_docker_hub_image,
     _patch_compose_env_vars,
     _post_deploy_suggestions,
     _preview_database_runtime,
@@ -48,10 +47,9 @@ def register_images_tools(mcp):
         memory_limit: str = "512Mi",
         compute_placement: str = "personal",
         redeploy_strategy: str = "recreate",
-        push_to_pluglayer_registry: bool = True,
         registry_id: str = "",
     ) -> str:
-        """Deploy a pullable Docker image into a project. By default, mirror it into an allowed managed registry first, except for obvious public Docker Hub images such as common databases where direct pull is usually better. For a local-only image built on the user's machine, use upload_image_archive_and_deploy() instead."""
+        """Deploy a pullable Docker image after PlugLayer mirrors it into a verified private managed repository. There is no public/direct-image bypass. For a local-only image built on the user's machine, use upload_image_archive_and_deploy() instead."""
         try:
             database_family = _database_family_for_image(image)
             if database_family:
@@ -105,7 +103,6 @@ def register_images_tools(mcp):
                     f"Cannot deploy into project `{project_id}` yet: {compute.get('message')} "
                     "Use list_attachable_project_nodes() and attach_node_to_project(), or help the user add compute, then retry."
                 )
-            should_mirror = push_to_pluglayer_registry and not _looks_like_public_docker_hub_image(image)
             payload = {
                 "name": name,
                 "route_slug": route_slug or None,
@@ -124,12 +121,7 @@ def register_images_tools(mcp):
                     "memory_limit": memory_limit,
                 },
             }
-            endpoint = (
-                f"/v1/plugin/projects/{project_id}/apps/push-image"
-                if should_mirror
-                else f"/v1/plugin/projects/{project_id}/apps"
-            )
-            data = await _client().post(endpoint, payload)
+            data = await _client().post(f"/v1/plugin/projects/{project_id}/apps/push-image", payload)
             task_id = data.get("task_id")
             app = data.get("app", {})
             mirrored = data.get("mirrored_image")
@@ -154,8 +146,8 @@ def register_images_tools(mcp):
             lines = [f"🚀 App queued: **{name}** (id: `{app.get('id')}`). Task ID: `{task_id}`"]
             if mirrored:
                 lines.append(f"Mirrored image: `{mirrored}`")
-            elif _looks_like_public_docker_hub_image(image):
-                lines.append("Using the public image directly, so no mirror push was needed.")
+            else:
+                lines.append("PlugLayer accepted the deployment only after verifying its managed repository is private.")
             lines.append("This usually takes around 10 minutes. Feel free to keep working and ask me to check status later.")
             lines.append(_fmt_task_hint(task_id))
             lines.extend(_post_deploy_suggestions(app, project_apps))
