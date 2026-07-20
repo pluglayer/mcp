@@ -9,6 +9,7 @@ from pluglayer_mcp.tools.deployment.app_read import register_app_read_tools
 from pluglayer_mcp.tools.deployment.catalog import register_catalog_tools
 from pluglayer_mcp.tools.deployment.compose import register_compose_tools
 from pluglayer_mcp.tools.deployment.connection_sync import register_connection_sync_tools
+from pluglayer_mcp.tools.deployment.env_import import register_env_import_tools
 from pluglayer_mcp.tools.deployment.databases import register_databases_tools
 from pluglayer_mcp.tools.deployment.helpers import (
     _compose_build_commands,
@@ -23,6 +24,7 @@ def register_deployment_tools(mcp):
     register_images_tools(mcp)
     register_compose_tools(mcp)
     register_connection_sync_tools(mcp)
+    register_env_import_tools(mcp)
     get_logs = register_app_read_tools(mcp)
     register_marketplace_tools(mcp)
     register_databases_tools(mcp)

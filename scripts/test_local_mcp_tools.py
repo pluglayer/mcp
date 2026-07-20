@@ -43,6 +43,7 @@ READ_ONLY_TOOLS: tuple[tuple[str, dict[str, Any]], ...] = (
 )
 
 EXPECTED_TOOL_NAMES = {
+    "apply_app_env_vars",
     "list_attachable_project_nodes",
     "attach_node_to_project",
     "detach_node_from_project",
