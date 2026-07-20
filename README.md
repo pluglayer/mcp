@@ -155,6 +155,7 @@ Marketplace template deployment through MCP now supports both:
 | `get_logs` | Get app logs |
 | `get_app_logs` | Alias for getting app logs |
 | `get_app_connection_env_vars` | Get concrete connection env vars and connection strings for an app/database so dependent apps can be updated correctly |
+| `apply_app_env_vars` | Securely import arbitrary runtime env vars from dotenv/`KEY=VALUE`, JSON, YAML text, or a direct key/value object; merge or replace, then optionally restart/redeploy without returning values |
 | `list_marketplace_templates` | List deployable marketplace templates before choosing one for a project |
 | `get_marketplace_template` | Inspect one marketplace template, including its required env vars |
 | `deploy_marketplace_template` | Deploy a marketplace template into an existing project or create a new project inline during the same MCP flow |
@@ -205,6 +206,7 @@ The generated workflow expects:
 - optional secrets:
   - `PLUGLAYER_API_URL` (defaults to `https://api.pluglayer.com`)
   - `PLUGLAYER_BUILD_ENV_JSON` (JSON object of build-time env vars/build args to inject during image build)
+  - `PLUGLAYER_ENV_JSON` (JSON object of runtime env vars securely imported before the final restart)
 
 **Add a custom domain:**
 > "Add `api.example.com` to my production project, detect the provider, show me the DNS records in a table, then verify it and attach it to my API app."

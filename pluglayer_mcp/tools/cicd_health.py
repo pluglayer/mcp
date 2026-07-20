@@ -124,12 +124,13 @@ def register_cicd_health_tools(mcp):
                 "5. Optional GitHub secrets:\n"
                 "   - `PLUGLAYER_API_URL`: defaults to `https://api.pluglayer.com`\n"
                 "   - `PLUGLAYER_BUILD_ENV_JSON`: JSON object of build-time env vars/build args to inject during image build, for example `{\"NEXT_PUBLIC_API_URL\":\"https://api.example.com\",\"SENTRY_AUTH_TOKEN\":\"...\"}`\n"
+                "   - `PLUGLAYER_ENV_JSON`: JSON object of runtime env vars to merge securely before the final restart\n"
                 "6. Commit and push to `main` or `master`.\n"
                 "7. On each push the workflow will:\n"
                 "   - build a multi-arch OCI archive\n"
                 "   - upload that image to PlugLayer for the same app id\n"
                 "   - inject CI-provided build env vars into the image build if present\n"
-                "   - redeploy the app without changing the slug"
+                "   - merge optional runtime env vars and restart the app without changing the slug"
             )
         except Exception as e:
             return _compact_error("Error generating pipeline", e)
