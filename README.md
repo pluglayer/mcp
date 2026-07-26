@@ -71,7 +71,9 @@ Before publishing a new `pluglayer-mcp` build:
 
 1. Confirm local command mode still uses `stdio` by default.
 2. Confirm `PLUGLAYER_API_URL` override works when pointed at a dev API.
-3. Confirm package version will be unique for the publish run.
+3. Let the publish workflow stamp the package version from the UTC date/time,
+   unique GitHub run ID, and run-attempt number. Do not reuse a published PyPI
+   version or artifact filename.
 4. Publish from the public repo `main` branch after reviewing the `dev -> main` PR.
 
 After publishing:
