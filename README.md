@@ -183,7 +183,7 @@ Marketplace template deployment through MCP now supports both:
 | `list_project_domains` | List custom domains for a project |
 | `get_domains_by_project` | Alias for project-domain lookup; use this before asking which domain the user wants so existing project domains can be offered as options |
 | `detect_custom_domain_provider` | Detect the likely DNS provider and authoritative zone so the user can confirm them before DNS instructions are shown |
-| `add_custom_domain` | Add a single or wildcard custom domain and return provider-friendly DNS records; rejects GoDaddy apex CNAME attempts with a supported `www` + 301 forwarding path |
+| `add_custom_domain` | Add a single or wildcard custom domain and return provider-friendly DNS records; explains that root and `www` need separate routing or an explicit redirect, and rejects GoDaddy apex CNAME attempts with a supported `www` + 301 forwarding path |
 | `verify_custom_domain` | Verify TXT/CNAME DNS and activate if attached |
 | `attach_custom_domain` | Attach a verified custom domain to an app |
 | `detach_custom_domain` | Detach a domain while keeping verification |
@@ -213,6 +213,11 @@ The generated workflow expects:
 
 **Add a custom domain:**
 > "Add `api.example.com` to my production project, detect the provider, show me the DNS records in a table, then verify it and attach it to my API app."
+
+For a root/`www` website pair, say whether both hostnames must work. PlugLayer routes
+exact hostnames, so `example.com` is not automatically covered when only
+`www.example.com` is attached. Configure the root separately or redirect it to
+`www`, then test a nested path such as `/page-1` on both names.
 
 **Provision a database and wire the backend to it:**
 > "Create a Postgres database in my `marketplace` project, check whether the slug `postgres` is available first, and after it finishes show me the connection env vars so we can update my backend."
