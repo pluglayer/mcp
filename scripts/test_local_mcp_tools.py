@@ -40,7 +40,25 @@ READ_ONLY_TOOLS: tuple[tuple[str, dict[str, Any]], ...] = (
     ("list_registries", {}),
     ("list_deployments", {}),
     ("list_my_feedback", {"limit": 10}),
+    (
+        "add_custom_domain",
+        {
+            "project_id": "godaddy-apex-guard-smoke",
+            "domain": "hivecitadel.com",
+            "mode": "single",
+            "provider_name": "GoDaddy",
+            "dns_zone": "hivecitadel.com",
+        },
+    ),
 )
+
+EXPECTED_TEXT = {
+    "add_custom_domain": (
+        "was not added to PlugLayer",
+        "www.hivecitadel.com",
+        "Permanent (301)",
+    ),
+}
 
 EXPECTED_TOOL_NAMES = {
     "apply_app_env_vars",
@@ -266,6 +284,10 @@ async def run_smoke_test(require_all: bool, include_mutations: bool) -> int:
         normalized = text.strip().lower()
         if normalized.startswith("error ") or "\n❌ error:" in normalized:
             failures.append((tool_name, text[:600]))
+            continue
+        missing_text = [marker for marker in EXPECTED_TEXT.get(tool_name, ()) if marker not in text]
+        if missing_text:
+            failures.append((tool_name, f"missing expected text: {', '.join(missing_text)}"))
             continue
 
         print(f"  PASS {tool_name}")
