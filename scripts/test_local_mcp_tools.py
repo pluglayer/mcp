@@ -87,14 +87,17 @@ def build_stdio_server_parameters() -> StdioServerParameters:
     api_key = _env("PLUGLAYER_API_KEY")
     if not api_key:
         raise RuntimeError("PLUGLAYER_API_KEY is required.")
+    server_env = {
+        "PLUGLAYER_API_KEY": api_key,
+        "PLUGLAYER_API_URL": api_url,
+        "UV_CACHE_DIR": _env("UV_CACHE_DIR", ".uv-cache"),
+    }
+    if _env("UV_NO_SYNC"):
+        server_env["UV_NO_SYNC"] = _env("UV_NO_SYNC")
     return StdioServerParameters(
         command="uv",
         args=["run", "--directory", str(MCP_DIR), "pluglayer-mcp"],
-        env={
-            "PLUGLAYER_API_KEY": api_key,
-            "PLUGLAYER_API_URL": api_url,
-            "UV_CACHE_DIR": _env("UV_CACHE_DIR", ".uv-cache"),
-        },
+        env=server_env,
     )
 
 

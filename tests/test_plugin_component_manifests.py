@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 from pathlib import Path
 
 
@@ -23,11 +25,40 @@ def test_public_plugins_declare_mcp_components_in_target_native_shape():
     cursor_root = plugins / "pluglayer-cursor-plugin"
     cursor_manifest = _json(cursor_root / ".cursor-plugin" / "plugin.json")
     assert cursor_manifest["mcp"] == "./mcp.json"
-    assert "pluglayer" in _json(cursor_root / "mcp.json")
+    cursor_mcp = _json(cursor_root / "mcp.json")
+    assert "pluglayer" in cursor_mcp
+    cursor_command = cursor_mcp["pluglayer"]["args"][-1]
+    assert "PLUGLAYER_CREDENTIALS_FILE" in cursor_command
+    assert "unset PLUGLAYER_API_KEY PLUGLAYER_API_URL" in cursor_command
+    assert "exit 78" in cursor_command
 
     antigravity_root = plugins / "pluglayer-antigravity-plugin"
     antigravity_mcp = _json(antigravity_root / "mcp_config.json")
     assert "pluglayer" in antigravity_mcp["mcpServers"]
+
+
+def test_cursor_plugin_fails_closed_when_local_auth_is_missing(tmp_path):
+    repo_root = Path(__file__).resolve().parents[2]
+    cursor_mcp = _json(
+        repo_root / "plugins" / "pluglayer-cursor-plugin" / "mcp.json"
+    )
+    cursor_command = cursor_mcp["pluglayer"]["args"][-1]
+    env = {
+        "HOME": str(tmp_path),
+        "PATH": os.environ.get("PATH", ""),
+    }
+
+    result = subprocess.run(
+        ["/bin/bash", "-c", cursor_command],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 78
+    assert "authentication is not configured" in result.stderr
+    assert "Bearer" not in result.stderr
 
 
 def test_every_plugin_exposes_feedback_intelligence():

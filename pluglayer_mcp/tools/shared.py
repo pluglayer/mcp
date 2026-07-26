@@ -3,11 +3,10 @@
 from typing import Any
 
 from pluglayer_mcp.client import PlugLayerClient
-from pluglayer_mcp.settings import settings
 
 
 def _client() -> PlugLayerClient:
-    return PlugLayerClient(api_key=settings.PLUGLAYER_API_KEY)
+    return PlugLayerClient()
 
 
 def _status_emoji(status: str) -> str:

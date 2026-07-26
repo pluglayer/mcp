@@ -11,6 +11,7 @@ import sys
 from mcp.server.fastmcp import FastMCP
 from mcp.types import Icon
 
+from pluglayer_mcp.credentials import is_api_key_configured
 from pluglayer_mcp.settings import settings
 
 mcp = FastMCP(
@@ -119,7 +120,7 @@ register_feedback_tools(mcp)
 
 def main():
     """Editor-safe entry point for `pluglayer-mcp` command."""
-    if not settings.PLUGLAYER_API_KEY:
+    if not is_api_key_configured():
         print(
             "WARNING: PLUGLAYER_API_KEY not set!\n"
             "Set it as an environment variable:\n"
