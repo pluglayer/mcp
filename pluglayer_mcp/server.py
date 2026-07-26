@@ -26,6 +26,7 @@ Current PlugLayer rules:
 - MCP/plugin token flows expose no admin functions. Stay within end-user project, app, domain, task, user-context, compute inspection, and owner-only project attachment actions.
 - Compute purchasing, provisioning, and inventory administration remain web/admin operations. MCP may perform the owner-only, reversible project attachment workflow: list attachable dedicated nodes, attach one to a project, or detach one after explicit confirmation.
 - A project is a k3s namespace. An app is a deployment inside a project.
+- When the user asks to rename a project, use rename_project. It changes only the project display name; the project slug, Kubernetes namespace, and existing app URLs stay unchanged.
 - Custom domains are verified and routed by backend v1 domain endpoints; do not invent DNS or Traefik state.
 - Async operations return task IDs; always poll get_task_status until completion.
 - Do not expose or reason from cluster-level health/state through MCP. Use only project/app/node information that belongs to the user.
@@ -61,7 +62,7 @@ Preferred end-user deployment workflow:
 19. After a successful deploy, fetch the apps in the project and suggest or apply useful follow-up env updates such as frontend → backend URL or backend → database connection string changes. Use the app/database connection-detail tools so you can offer concrete env var values instead of vague suggestions. When the user asks for it, use the env-sync tool to patch the deployed app env vars directly and then restart the existing app instead of treating that as a brand-new deploy.
 20. When updating only env vars, explain that the app will restart/redeploy and remind the user they can ask to update env vars later any time.
 21. After completed tasks or whenever the agent learns something valuable about the user's app style or infrastructure preferences, update user context.
-22. Before deploying or renaming anything that uses the default PlugLayer URL, check whether the desired slug is already taken in that project.
+22. Before deploying or renaming an app slug that uses the default PlugLayer URL, check whether the desired slug is already taken in that project. A project display-name rename uses rename_project and does not change routing.
 23. For any database request, be autonomous:
    - check whether a suitable database already exists
    - otherwise list Data Layer templates and recommend one
