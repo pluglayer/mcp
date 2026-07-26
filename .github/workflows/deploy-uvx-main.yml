@@ -57,7 +57,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          VERSION="0.$(date -u +%y).$(date -u +%m%d%H)"
+          VERSION="0.$(date -u +%y).$(date -u +%m%d%H%M).${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
           export VERSION
 
           python3 - <<PY
@@ -97,7 +97,9 @@ jobs:
           set -euo pipefail
 
           if [[ -n "${UV_PUBLISH_TOKEN:-}" ]]; then
-            uv publish
+            uv publish --check-url https://pypi.org/simple/
           else
-            uv publish --trusted-publishing always
+            uv publish \
+              --check-url https://pypi.org/simple/ \
+              --trusted-publishing always
           fi
