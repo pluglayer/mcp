@@ -111,6 +111,48 @@ def register_identity_project_tools(mcp):
 
 
     @mcp.tool()
+    async def rename_project(project_id: str, new_name: str) -> str:
+        """
+        Rename a PlugLayer project's display name.
+
+        This does not change the project's slug, Kubernetes namespace, or existing app URLs.
+        """
+        try:
+            clean_name = new_name.strip()
+            if len(clean_name) < 2 or len(clean_name) > 50:
+                return "❌ Project name must be between 2 and 50 characters."
+            data = await _client().patch(
+                f"/v1/plugin/projects/{project_id}",
+                {"name": clean_name},
+            )
+            project = data.get("project", data)
+            await _remember_context(
+                {
+                    "last_completed_task": {
+                        "type": "rename_project",
+                        "project_id": project_id,
+                        "project_name": project.get("name", clean_name),
+                    },
+                    "projects": {
+                        project_id: {
+                            "name": project.get("name", clean_name),
+                            "namespace": project.get("namespace"),
+                        }
+                    },
+                }
+            )
+            return (
+                f"✅ Project renamed to **{project.get('name', clean_name)}**.\n"
+                f"Project ID: `{project_id}`\n"
+                f"Slug unchanged: `{project.get('slug', 'unknown')}`\n"
+                f"Namespace unchanged: `{project.get('namespace', 'unknown')}`\n\n"
+                "Existing app URLs are unchanged."
+            )
+        except Exception as e:
+            return _compact_error("Error renaming project", e)
+
+
+    @mcp.tool()
     async def get_project(project_id: str) -> str:
         """Get project details for one of the authenticated user's projects."""
         try:

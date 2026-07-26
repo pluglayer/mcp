@@ -5,7 +5,7 @@ import httpx
 
 from pluglayer_mcp.credentials import resolve_api_base_url, resolve_api_key
 
-_USER_AGENT = "pluglayer-mcp/0.1.4"
+_USER_AGENT = "pluglayer-mcp/0.1.5"
 
 
 def _stringify_detail(detail: Any) -> str:
@@ -118,6 +118,9 @@ class PlugLayerClient:
 
     async def post(self, path: str, data: dict = None, params: dict = None, timeout: float = 60.0) -> Any:
         return await self._request("POST", path, params=params, data=data or {}, timeout=timeout)
+
+    async def patch(self, path: str, data: dict = None, params: dict = None, timeout: float = 60.0) -> Any:
+        return await self._request("PATCH", path, params=params, data=data or {}, timeout=timeout)
 
     async def post_form(self, path: str, data: dict[str, Any], timeout: float = 60.0) -> Any:
         """POST an application/x-www-form-urlencoded body to a PlugLayer endpoint."""

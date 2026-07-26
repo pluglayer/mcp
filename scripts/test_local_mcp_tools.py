@@ -65,6 +65,7 @@ EXPECTED_TOOL_NAMES = {
     "list_attachable_project_nodes",
     "attach_node_to_project",
     "detach_node_from_project",
+    "rename_project",
     "submit_feedback",
     "get_feedback",
 }
@@ -73,6 +74,7 @@ EXPECTED_TOOL_NAMES = {
 @dataclass(slots=True)
 class BackendFixtures:
     project_id: str | None = None
+    project_name: str | None = None
     app_id: str | None = None
     domain_id: str | None = None
     task_id: str | None = None
@@ -80,6 +82,14 @@ class BackendFixtures:
 
 def _env(name: str, default: str = "") -> str:
     return (os.getenv(name) or default).strip()
+
+
+def _response_data(response: httpx.Response) -> dict[str, Any]:
+    payload = response.json()
+    if isinstance(payload, dict) and payload.get("ok") is True:
+        data = payload.get("data")
+        return data if isinstance(data, dict) else {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def build_stdio_server_parameters() -> StdioServerParameters:
@@ -143,21 +153,27 @@ async def discover_backend_fixtures() -> BackendFixtures:
         if not fixtures.project_id:
             resp = await client.get("/v1/plugin/projects")
             resp.raise_for_status()
-            projects = resp.json().get("projects", [])
+            projects = _response_data(resp).get("projects", [])
             if projects:
                 fixtures.project_id = projects[0].get("id")
+                fixtures.project_name = projects[0].get("name")
+
+        if fixtures.project_id and not fixtures.project_name:
+            resp = await client.get(f"/v1/plugin/projects/{fixtures.project_id}")
+            resp.raise_for_status()
+            fixtures.project_name = (_response_data(resp).get("project") or {}).get("name")
 
         if fixtures.project_id and not fixtures.app_id:
             resp = await client.get(f"/v1/plugin/projects/{fixtures.project_id}/apps")
             resp.raise_for_status()
-            apps = resp.json().get("apps", [])
+            apps = _response_data(resp).get("apps", [])
             if apps:
                 fixtures.app_id = apps[0].get("id")
 
         if fixtures.project_id and not fixtures.domain_id:
             resp = await client.get(f"/v1/plugin/projects/{fixtures.project_id}/domains")
             resp.raise_for_status()
-            domains = resp.json().get("domains", [])
+            domains = _response_data(resp).get("domains", [])
             if domains:
                 fixtures.domain_id = domains[0].get("id")
 
@@ -226,6 +242,24 @@ def mutation_calls(fixtures: BackendFixtures) -> list[tuple[str, dict[str, Any]]
                 ("redeploy", {"deployment_id": fixtures.app_id}),
                 ("rollback", {"deployment_id": fixtures.app_id}),
             ]
+        )
+
+    if (
+        fixtures.project_id
+        and fixtures.project_name
+        and _env("PLUGLAYER_TEST_ALLOW_PROJECT_RENAME") == "1"
+    ):
+        calls.append(
+            (
+                "rename_project",
+                {
+                    "project_id": fixtures.project_id,
+                    "new_name": _env(
+                        "PLUGLAYER_TEST_PROJECT_RENAME_NAME",
+                        fixtures.project_name,
+                    ),
+                },
+            )
         )
 
     if fixtures.project_id and _env("PLUGLAYER_TEST_ALLOW_DOMAIN_MUTATIONS") == "1":
@@ -297,6 +331,7 @@ async def run_smoke_test(require_all: bool, include_mutations: bool) -> int:
 
     print("\nFixture discovery:")
     print(f"  project_id: {fixtures.project_id or 'none'}")
+    print(f"  project_name: {fixtures.project_name or 'none'}")
     print(f"  app_id:     {fixtures.app_id or 'none'}")
     print(f"  domain_id:  {fixtures.domain_id or 'none'}")
     print(f"  task_id:    {fixtures.task_id or 'none'}")

@@ -130,6 +130,7 @@ Marketplace template deployment through MCP now supports both:
 | `list_projects` | List authenticated user's projects |
 | `get_my_projects` | Alias for listing the current user's projects |
 | `create_project` | Create a new project namespace |
+| `rename_project` | Rename a project's display name without changing its slug, namespace, or existing app URLs |
 | `get_project` | Get project details, current apps in the project, and attached custom-domain state |
 | `remove_project` | Remove one of the user's projects by deleting its apps first, requesting namespace cleanup, and then archiving the project record/history |
 | `delete_project` | Alias for `remove_project` |
