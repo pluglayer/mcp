@@ -87,6 +87,40 @@ def _is_apex_record(record_name: str, dns_zone: str | None) -> bool:
     return bool(dns_zone and _normalize_dns_name(record_name) == _normalize_dns_name(dns_zone))
 
 
+def _root_www_coverage_guidance(
+    domain_name: str,
+    dns_zone: str | None,
+    provider_name: str | None,
+) -> list[str]:
+    domain = _normalize_dns_name(domain_name)
+    zone = _normalize_dns_name(dns_zone or "")
+    if not zone or domain not in {zone, f"www.{zone}"}:
+        return []
+
+    alternate = f"www.{zone}" if domain == zone else zone
+    lines = [
+        "**Root and `www` coverage:**",
+        f"- PlugLayer routes only the exact hostname `{domain}`; `{alternate}` is not covered automatically.",
+        "- If both names must work, choose one canonical hostname and explicitly configure the other.",
+    ]
+    if domain == f"www.{zone}" and _is_godaddy(provider_name):
+        lines.append(
+            f"- For GoDaddy, keep `{domain}` in PlugLayer and configure HTTPS Permanent (301) "
+            f"Forward only from `{zone}` to `https://{domain}`."
+        )
+    else:
+        lines.append(
+            f"- Either add, verify, and attach `{alternate}` as a separate PlugLayer custom domain "
+            "using a provider-compatible apex record, or configure an HTTPS permanent redirect "
+            f"from `{alternate}` to `{domain}`."
+        )
+    lines.append(
+        f"- Before calling setup complete, test a real nested path on both names and confirm "
+        f"`https://{alternate}/page-1` reaches `https://{domain}/page-1` without losing the path or query string."
+    )
+    return lines
+
+
 def _godaddy_apex_guidance(domain_name: str, dns_zone: str, *, existing: bool = False) -> str:
     prefix = (
         f"**{domain_name} is already registered, but it cannot finish direct DNS routing with GoDaddy DNS.**"
@@ -106,6 +140,7 @@ def _godaddy_apex_guidance(domain_name: str, dns_zone: str, *, existing: bool = 
             f"3. In GoDaddy, open **DNS → Forwarding → Add Forwarding**, choose **Domain**, set the destination to `https://{www_name}`, and choose **Permanent (301)** with **Forward only** (no masking).",
             "",
             f"The apex redirect remains managed by GoDaddy; `{www_name}` is the custom hostname routed directly by PlugLayer.",
+            f"Before calling setup complete, test both `https://{dns_zone}/page-1` and `https://{www_name}/page-1`. The root request must redirect to the same path on `www` (and preserve any query string), not to the homepage or a PlugLayer edge 404.",
             "",
             "GoDaddy forwarding guide: https://www.godaddy.com/help/forward-my-godaddy-domain-12123",
         ]
@@ -161,6 +196,10 @@ def _markdown_dns_table(
     else:
         lines.append("\nProvider not confirmed yet.")
         lines.append("- Confirm the DNS provider and authoritative zone before converting exact names into relative Host/Name labels.")
+    coverage = _root_www_coverage_guidance(domain_name, dns_zone, provider_name)
+    if coverage:
+        lines.append("")
+        lines.extend(coverage)
     lines.append("\nAfter you add the records, tell me you've added them and I can verify and continue.")
     return "\n".join(lines)
 

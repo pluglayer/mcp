@@ -92,6 +92,34 @@ def test_godaddy_subdomain_uses_zone_relative_hosts():
     assert "`_pluglayer-verify.www` in GoDaddy" in table
     assert "`www` in GoDaddy (`www.hivecitadel.com` exact DNS name)" in table
     assert "CNAME records only for subdomain prefixes" in table
+    assert "routes only the exact hostname `www.hivecitadel.com`" in table
+    assert "Permanent (301) Forward only" in table
+    assert "https://hivecitadel.com/page-1" in table
+    assert "https://www.hivecitadel.com/page-1" in table
+
+
+def test_root_domain_warns_that_www_needs_separate_routing_or_redirect():
+    table = _markdown_dns_table(
+        {
+            "domain": "example.com",
+            "mode": "single",
+            "verification": {
+                "name": "_pluglayer-verify.example.com",
+                "value": "pl-verify-123",
+            },
+            "dns": {
+                "expected_type": "CNAME",
+                "expected_value": "cname.apps.pluglayer.io",
+            },
+        },
+        "Cloudflare",
+        "example.com",
+    )
+
+    assert "routes only the exact hostname `example.com`" in table
+    assert "`www.example.com` is not covered automatically" in table
+    assert "separate PlugLayer custom domain" in table
+    assert "https://www.example.com/page-1" in table
 
 
 def test_add_custom_domain_blocks_godaddy_apex_before_api_call(monkeypatch):
