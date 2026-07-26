@@ -179,8 +179,8 @@ Marketplace template deployment through MCP now supports both:
 | `delete_database` | Alias for `remove_database` |
 | `list_project_domains` | List custom domains for a project |
 | `get_domains_by_project` | Alias for project-domain lookup; use this before asking which domain the user wants so existing project domains can be offered as options |
-| `detect_custom_domain_provider` | Detect the likely DNS/domain provider so the user can confirm it before DNS instructions are shown |
-| `add_custom_domain` | Add a single or wildcard custom domain and return DNS records in a provider-friendly table |
+| `detect_custom_domain_provider` | Detect the likely DNS provider and authoritative zone so the user can confirm them before DNS instructions are shown |
+| `add_custom_domain` | Add a single or wildcard custom domain and return provider-friendly DNS records; rejects GoDaddy apex CNAME attempts with a supported `www` + 301 forwarding path |
 | `verify_custom_domain` | Verify TXT/CNAME DNS and activate if attached |
 | `attach_custom_domain` | Attach a verified custom domain to an app |
 | `detach_custom_domain` | Detach a domain while keeping verification |

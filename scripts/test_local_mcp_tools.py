@@ -40,7 +40,25 @@ READ_ONLY_TOOLS: tuple[tuple[str, dict[str, Any]], ...] = (
     ("list_registries", {}),
     ("list_deployments", {}),
     ("list_my_feedback", {"limit": 10}),
+    (
+        "add_custom_domain",
+        {
+            "project_id": "godaddy-apex-guard-smoke",
+            "domain": "hivecitadel.com",
+            "mode": "single",
+            "provider_name": "GoDaddy",
+            "dns_zone": "hivecitadel.com",
+        },
+    ),
 )
+
+EXPECTED_TEXT = {
+    "add_custom_domain": (
+        "was not added to PlugLayer",
+        "www.hivecitadel.com",
+        "Permanent (301)",
+    ),
+}
 
 EXPECTED_TOOL_NAMES = {
     "apply_app_env_vars",
@@ -69,14 +87,17 @@ def build_stdio_server_parameters() -> StdioServerParameters:
     api_key = _env("PLUGLAYER_API_KEY")
     if not api_key:
         raise RuntimeError("PLUGLAYER_API_KEY is required.")
+    server_env = {
+        "PLUGLAYER_API_KEY": api_key,
+        "PLUGLAYER_API_URL": api_url,
+        "UV_CACHE_DIR": _env("UV_CACHE_DIR", ".uv-cache"),
+    }
+    if _env("UV_NO_SYNC"):
+        server_env["UV_NO_SYNC"] = _env("UV_NO_SYNC")
     return StdioServerParameters(
         command="uv",
         args=["run", "--directory", str(MCP_DIR), "pluglayer-mcp"],
-        env={
-            "PLUGLAYER_API_KEY": api_key,
-            "PLUGLAYER_API_URL": api_url,
-            "UV_CACHE_DIR": _env("UV_CACHE_DIR", ".uv-cache"),
-        },
+        env=server_env,
     )
 
 
@@ -266,6 +287,10 @@ async def run_smoke_test(require_all: bool, include_mutations: bool) -> int:
         normalized = text.strip().lower()
         if normalized.startswith("error ") or "\n❌ error:" in normalized:
             failures.append((tool_name, text[:600]))
+            continue
+        missing_text = [marker for marker in EXPECTED_TEXT.get(tool_name, ()) if marker not in text]
+        if missing_text:
+            failures.append((tool_name, f"missing expected text: {', '.join(missing_text)}"))
             continue
 
         print(f"  PASS {tool_name}")

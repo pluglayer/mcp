@@ -29,11 +29,16 @@ class DomainProviderDetection:
     provider: str | None
     confidence: str
     source: str
+    zone: str | None
     nameservers: list[str]
     suggestions: list[str]
 
 
-def infer_provider_from_nameservers(nameservers: Iterable[str]) -> DomainProviderDetection:
+def infer_provider_from_nameservers(
+    nameservers: Iterable[str],
+    *,
+    zone: str | None = None,
+) -> DomainProviderDetection:
     normalized = [item.strip().lower().rstrip(".") for item in nameservers if item]
     for provider, patterns in _PROVIDER_PATTERNS.items():
         for record in normalized:
@@ -42,6 +47,7 @@ def infer_provider_from_nameservers(nameservers: Iterable[str]) -> DomainProvide
                     provider=provider,
                     confidence="high",
                     source="ns",
+                    zone=zone,
                     nameservers=normalized,
                     suggestions=[],
                 )
@@ -49,6 +55,7 @@ def infer_provider_from_nameservers(nameservers: Iterable[str]) -> DomainProvide
         provider=None,
         confidence="unknown",
         source="ns",
+        zone=zone,
         nameservers=normalized,
         suggestions=list(_PROVIDER_PATTERNS.keys())[:8],
     )
@@ -59,15 +66,34 @@ def lookup_ns_records(domain: str) -> list[str]:
     with urlopen(url, timeout=10) as response:
         payload = json.loads(response.read().decode("utf-8"))
     answers = payload.get("Answer") or []
-    return [str(item.get("data", "")).rstrip(".") for item in answers if item.get("data")]
+    return [
+        str(item.get("data", "")).rstrip(".")
+        for item in answers
+        if item.get("type") == 2 and item.get("data")
+    ]
+
+
+def lookup_authoritative_nameservers(domain: str) -> tuple[str | None, list[str]]:
+    """Find the closest DNS zone so subdomain records get the right UI host label."""
+    normalized = domain.strip().lower().rstrip(".")
+    if normalized.startswith("*."):
+        normalized = normalized[2:]
+    labels = [label for label in normalized.split(".") if label]
+    for index in range(max(0, len(labels) - 1)):
+        candidate = ".".join(labels[index:])
+        nameservers = lookup_ns_records(candidate)
+        if nameservers:
+            return candidate, nameservers
+    return None, []
 
 
 def detect_domain_provider(domain: str) -> DomainProviderDetection:
     try:
-        nameservers = lookup_ns_records(domain)
+        zone, nameservers = lookup_authoritative_nameservers(domain)
     except Exception:
+        zone = None
         nameservers = []
-    return infer_provider_from_nameservers(nameservers)
+    return infer_provider_from_nameservers(nameservers, zone=zone)
 
 
 def main() -> None:
@@ -83,6 +109,7 @@ def main() -> None:
                 "provider": result.provider,
                 "confidence": result.confidence,
                 "source": result.source,
+                "zone": result.zone,
                 "nameservers": result.nameservers,
                 "suggestions": result.suggestions,
             },
