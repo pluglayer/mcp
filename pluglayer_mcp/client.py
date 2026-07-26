@@ -2,7 +2,10 @@ import json
 from typing import Optional, Any
 
 import httpx
-from pluglayer_mcp.settings import settings
+
+from pluglayer_mcp.credentials import resolve_api_base_url, resolve_api_key
+
+_USER_AGENT = "pluglayer-mcp/0.1.4"
 
 
 def _stringify_detail(detail: Any) -> str:
@@ -71,15 +74,19 @@ class PlugLayerClient:
     """HTTP client for the PlugLayer API."""
 
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
-        self.api_key = api_key or settings.PLUGLAYER_API_KEY
-        self.base_url = (base_url or settings.resolved_api_base_url).rstrip("/")
+        self._explicit_api_key = api_key
+        self.base_url = resolve_api_base_url(base_url).rstrip("/")
+
+    @property
+    def api_key(self) -> str:
+        return resolve_api_key(self._explicit_api_key)
 
     @property
     def headers(self) -> dict:
         return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "User-Agent": "pluglayer-mcp/0.1.0",
+            "User-Agent": _USER_AGENT,
         }
 
     async def _request(self, method: str, path: str, *, params: dict = None, data: dict = None, timeout: float = 30.0) -> Any:
@@ -116,7 +123,7 @@ class PlugLayerClient:
         """POST an application/x-www-form-urlencoded body to a PlugLayer endpoint."""
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "User-Agent": "pluglayer-mcp/0.1.0",
+            "User-Agent": _USER_AGENT,
         }
         async with httpx.AsyncClient(timeout=timeout) as client:
             try:
@@ -160,7 +167,7 @@ class PlugLayerClient:
     ) -> Any:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "User-Agent": "pluglayer-mcp/0.1.0",
+            "User-Agent": _USER_AGENT,
         }
         with open(file_path, "rb") as fh:
             files = {

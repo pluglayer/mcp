@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     PLUGLAYER_API_URL: str = Field(default="")
     PLUGLAYER_API_KEY: str = ""  # Set by user via env var
+    PLUGLAYER_CREDENTIALS_FILE: str = ""
     MCP_HOST: str = "127.0.0.1"
     MCP_PORT: int = 0
     DEBUG: bool = False

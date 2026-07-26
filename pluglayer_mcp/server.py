@@ -11,6 +11,7 @@ import sys
 from mcp.server.fastmcp import FastMCP
 from mcp.types import Icon
 
+from pluglayer_mcp.credentials import is_api_key_configured
 from pluglayer_mcp.settings import settings
 
 mcp = FastMCP(
@@ -43,7 +44,7 @@ Preferred end-user deployment workflow:
 5. Always ask for the app name before deployment and offer sensible suggestions like `mongo-db`, `api-backend`, `web-frontend`, or `<project>-worker`. Include `[you choose]` as an option when the user wants the agent to decide.
 6. Treat app name and PlugLayer slug as separate values. App name is the PlugLayer app identity. PlugLayer slug controls the default PlugLayer URL segment, for example `https://<slug>.<project>.<user>.apps.pluglayer.io`. Let the user keep them the same or choose different values, and make it clear they can update the slug later.
 7. Before deployment, ask whether they want the default PlugLayer subdomain for now or their own custom domain now. Existing project domains must be listed as explicit options if they already exist. Make it explicit that updating the PlugLayer slug is different from adding or updating a custom domain.
-8. If they want a custom domain, run detect_custom_domain_provider first, confirm the provider with the user, and then show DNS record instructions in a markdown table with columns: Type, Name / Host, Content / Value / Target, Description. Convert fully qualified DNS names into the provider's UI host format when needed, for example `@` for root or `_pluglayer-verify` instead of `_pluglayer-verify.example.com` in GoDaddy-style UIs.
+8. If they want a custom domain, run detect_custom_domain_provider first, confirm the provider and authoritative DNS zone with the user, then pass both to add_custom_domain and show its DNS table. Convert exact names into provider UI labels only when supported. GoDaddy cannot publish a CNAME at `@`: for a GoDaddy apex domain, do not add the apex to PlugLayer; use `www` as the PlugLayer custom domain and configure GoDaddy HTTPS Permanent (301) Forward only from the apex to `www`.
 9. Check get_compute_summary(project_id) for the exact destination project. Account-wide compute is not enough proof that the project can deploy. If sizing is unclear, call estimate_compute first.
 10. If the project has no attached Ready node or insufficient project-scoped capacity, do not deploy yet. Call list_attachable_project_nodes(project_id). If an owned node is available, offer to attach it with attach_node_to_project; otherwise estimate/add compute and guide the user to the PlugLayer Compute flow. Retry only after get_compute_summary(project_id) reports enough capacity.
 11. Before deploying, understand the environment variables the app needs. If callback URLs, public API URLs, database connection strings, or slugs will likely change after deployment, update or confirm them before deploying whenever possible.
@@ -119,7 +120,7 @@ register_feedback_tools(mcp)
 
 def main():
     """Editor-safe entry point for `pluglayer-mcp` command."""
-    if not settings.PLUGLAYER_API_KEY:
+    if not is_api_key_configured():
         print(
             "WARNING: PLUGLAYER_API_KEY not set!\n"
             "Set it as an environment variable:\n"
