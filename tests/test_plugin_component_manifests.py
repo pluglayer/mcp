@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import tomllib
 from pathlib import Path
 
 
@@ -28,8 +29,10 @@ def test_public_plugins_declare_mcp_components_in_target_native_shape():
     cursor_mcp = _json(cursor_root / "mcp.json")
     assert "pluglayer" in cursor_mcp
     cursor_command = cursor_mcp["pluglayer"]["args"][-1]
+    assert cursor_mcp["pluglayer"]["args"][0] == "-c"
     assert "PLUGLAYER_CREDENTIALS_FILE" in cursor_command
     assert "unset PLUGLAYER_API_KEY PLUGLAYER_API_URL" in cursor_command
+    assert "uvx pluglayer-mcp@latest" in cursor_command
     assert "exit 78" in cursor_command
 
     antigravity_root = plugins / "pluglayer-antigravity-plugin"
@@ -59,6 +62,20 @@ def test_cursor_plugin_fails_closed_when_local_auth_is_missing(tmp_path):
     assert result.returncode == 78
     assert "authentication is not configured" in result.stderr
     assert "Bearer" not in result.stderr
+
+
+def test_mcp_python_sdk_stays_on_fastmcp_compatible_v1():
+    repo_root = Path(__file__).resolve().parents[2]
+    with (repo_root / "pluglayer-mcp" / "pyproject.toml").open("rb") as handle:
+        project = tomllib.load(handle)["project"]
+
+    mcp_requirement = next(
+        dependency
+        for dependency in project["dependencies"]
+        if dependency.startswith("mcp[")
+    )
+    assert ">=1.28" in mcp_requirement
+    assert "<2" in mcp_requirement
 
 
 def test_every_plugin_exposes_feedback_intelligence():
