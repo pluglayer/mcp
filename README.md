@@ -20,6 +20,12 @@ PLUGLAYER_API_KEY=your-pluglayer-api-token pluglayer-mcp
 
 ## Configuration
 
+For editor installations, PlugLayer also reads
+`~/.pluglayer/credentials.env` on every tool call. Saving or rotating
+`PLUGLAYER_API_KEY` (and optionally `PLUGLAYER_API_URL`) there takes effect on
+the next call without restarting the server. A client's OAuth or generic
+`mcp_auth` action does not configure credentials for a local `stdio` server.
+
 ### Claude Desktop
 Add to `~/.config/Claude/claude_desktop_config.json`:
 
@@ -42,16 +48,23 @@ Add to `~/.config/Claude/claude_desktop_config.json`:
 Add to `~/.cursor/mcp.json`:
 ```json
 {
-  "pluglayer": {
-    "command": "uvx",
-    "type": "stdio",
-    "args": ["pluglayer-mcp"],
-    "env": {
-      "PLUGLAYER_API_KEY": "your-pluglayer-api-token"
+  "mcpServers": {
+    "pluglayer": {
+      "command": "uvx",
+      "type": "stdio",
+      "args": ["pluglayer-mcp@latest"],
+      "env": {
+        "PLUGLAYER_API_KEY": "your-pluglayer-api-token"
+      }
     }
   }
 }
 ```
+
+Use either this manual registration or the PlugLayer Cursor plugin's bundled
+server, not both. If both appear in Cursor's Tools & MCP settings, disable or
+remove the manual copy so tool calls cannot land on servers with different
+authentication state.
 
 ### Remote HTTP (hosted)
 The remote MCP server runs at `mcp.pluglayer.com`. Pass your token as:

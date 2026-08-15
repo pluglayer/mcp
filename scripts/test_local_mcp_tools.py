@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import shlex
 import sys
+import tempfile
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -92,16 +94,23 @@ def _response_data(response: httpx.Response) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def build_stdio_server_parameters() -> StdioServerParameters:
+def build_stdio_server_parameters(
+    credentials_home: Path | None = None,
+) -> StdioServerParameters:
     api_url = _env("PLUGLAYER_API_URL", "http://localhost:8000")
     api_key = _env("PLUGLAYER_API_KEY")
     if not api_key:
         raise RuntimeError("PLUGLAYER_API_KEY is required.")
-    server_env = {
-        "PLUGLAYER_API_KEY": api_key,
-        "PLUGLAYER_API_URL": api_url,
-        "UV_CACHE_DIR": _env("UV_CACHE_DIR", ".uv-cache"),
-    }
+    server_env = {"UV_CACHE_DIR": _env("UV_CACHE_DIR", ".uv-cache")}
+    if credentials_home is None:
+        server_env.update(
+            {
+                "PLUGLAYER_API_KEY": api_key,
+                "PLUGLAYER_API_URL": api_url,
+            }
+        )
+    else:
+        server_env["HOME"] = str(credentials_home)
     if _env("UV_NO_SYNC"):
         server_env["UV_NO_SYNC"] = _env("UV_NO_SYNC")
     return StdioServerParameters(
@@ -135,6 +144,58 @@ class MCPTester:
                 text = getattr(item, "text", None)
                 rendered.append(text if text is not None else repr(item))
             return rendered
+
+
+def _result_text(result: Any) -> str:
+    return "\n".join(
+        text
+        for item in getattr(result, "content", []) or []
+        if (text := getattr(item, "text", None)) is not None
+    )
+
+
+def _write_smoke_credentials(path: Path, api_key: str, api_url: str) -> None:
+    path.write_text(
+        "\n".join(
+            (
+                f"export PLUGLAYER_API_KEY={shlex.quote(api_key)}",
+                f"export PLUGLAYER_API_URL={shlex.quote(api_url)}",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o600)
+
+
+async def verify_runtime_auth_refresh() -> None:
+    """Prove one stdio server observes a token saved after it starts."""
+    api_key = _env("PLUGLAYER_API_KEY")
+    api_url = _env("PLUGLAYER_API_URL", "http://localhost:8000")
+    with tempfile.TemporaryDirectory(prefix="pluglayer-mcp-auth-") as temp_dir:
+        credentials_home = Path(temp_dir)
+        credentials = credentials_home / ".pluglayer" / "credentials.env"
+        credentials.parent.mkdir()
+        _write_smoke_credentials(credentials, "", api_url)
+        server = build_stdio_server_parameters(credentials_home)
+
+        async with stdio_client(server) as (read_stream, write_stream):
+            async with ClientSession(read_stream, write_stream) as session:
+                await session.initialize()
+                before = _result_text(await session.call_tool("get_current_user", {}))
+                if "authentication is not configured" not in before.lower():
+                    raise RuntimeError(
+                        "Expected the initial unauthenticated tool call to fail safely."
+                    )
+
+                _write_smoke_credentials(credentials, api_key, api_url)
+                after = _result_text(await session.call_tool("get_current_user", {}))
+                if "current pluglayer user" not in after.lower():
+                    raise RuntimeError(
+                        "The running MCP server did not authenticate after the credential refresh."
+                    )
+
+    print("Runtime credential refresh: PASS")
 
 
 async def discover_backend_fixtures() -> BackendFixtures:
@@ -281,6 +342,7 @@ def mutation_calls(fixtures: BackendFixtures) -> list[tuple[str, dict[str, Any]]
 
 
 async def run_smoke_test(require_all: bool, include_mutations: bool) -> int:
+    await verify_runtime_auth_refresh()
     tester = MCPTester(build_stdio_server_parameters())
     tools = await tester.list_tools()
     tool_names = {tool.name for tool in tools}
@@ -377,11 +439,19 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also run mutation tools that are explicitly enabled through env fixtures.",
     )
+    parser.add_argument(
+        "--auth-refresh-only",
+        action="store_true",
+        help="Only prove that one running stdio server observes newly saved credentials.",
+    )
     return parser
 
 
 def main() -> int:
     args = build_parser().parse_args()
+    if args.auth_refresh_only:
+        asyncio.run(verify_runtime_auth_refresh())
+        return 0
     return asyncio.run(
         run_smoke_test(
             require_all=args.require_all,

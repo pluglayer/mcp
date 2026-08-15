@@ -1,5 +1,4 @@
 import json
-import os
 import subprocess
 import tomllib
 from pathlib import Path
@@ -31,24 +30,32 @@ def test_public_plugins_declare_mcp_components_in_target_native_shape():
     cursor_command = cursor_mcp["pluglayer"]["args"][-1]
     assert cursor_mcp["pluglayer"]["args"][0] == "-c"
     assert "PLUGLAYER_CREDENTIALS_FILE" in cursor_command
-    assert "unset PLUGLAYER_API_KEY PLUGLAYER_API_URL" in cursor_command
     assert "uvx pluglayer-mcp@latest" in cursor_command
-    assert "exit 78" in cursor_command
+    assert ". \"$credential_file\"" not in cursor_command
+    assert "exit 78" not in cursor_command
 
     antigravity_root = plugins / "pluglayer-antigravity-plugin"
     antigravity_mcp = _json(antigravity_root / "mcp_config.json")
     assert "pluglayer" in antigravity_mcp["mcpServers"]
 
 
-def test_cursor_plugin_fails_closed_when_local_auth_is_missing(tmp_path):
+def test_cursor_plugin_starts_without_auth_for_live_tool_discovery(tmp_path):
     repo_root = Path(__file__).resolve().parents[2]
     cursor_mcp = _json(
         repo_root / "plugins" / "pluglayer-cursor-plugin" / "mcp.json"
     )
     cursor_command = cursor_mcp["pluglayer"]["args"][-1]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    uvx = bin_dir / "uvx"
+    uvx.write_text(
+        "#!/bin/sh\nprintf '%s\\n' \"$PLUGLAYER_CREDENTIALS_FILE\" \"$*\"\n",
+        encoding="utf-8",
+    )
+    uvx.chmod(0o755)
     env = {
         "HOME": str(tmp_path),
-        "PATH": os.environ.get("PATH", ""),
+        "PATH": str(bin_dir),
     }
 
     result = subprocess.run(
@@ -59,9 +66,23 @@ def test_cursor_plugin_fails_closed_when_local_auth_is_missing(tmp_path):
         check=False,
     )
 
-    assert result.returncode == 78
-    assert "authentication is not configured" in result.stderr
-    assert "Bearer" not in result.stderr
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == [
+        str(tmp_path / ".pluglayer" / "credentials.env"),
+        "pluglayer-mcp@latest",
+    ]
+
+
+def test_cursor_installer_warns_about_duplicate_mcp_registration():
+    repo_root = Path(__file__).resolve().parents[2]
+    installer = (
+        repo_root / "plugins" / "pluglayer-cursor-plugin" / "install-common.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "warn_cursor_duplicate_mcp" in installer
+    assert '${HOME}/.cursor/mcp.json' in installer
+    assert '${INVOKED_FROM_DIR}/.cursor/mcp.json' in installer
+    assert "different authentication state" in installer
 
 
 def test_mcp_python_sdk_stays_on_fastmcp_compatible_v1():

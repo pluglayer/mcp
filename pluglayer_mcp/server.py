@@ -123,9 +123,12 @@ def main():
     """Editor-safe entry point for `pluglayer-mcp` command."""
     if not is_api_key_configured():
         print(
-            "WARNING: PLUGLAYER_API_KEY not set!\n"
-            "Set it as an environment variable:\n"
-            "  PLUGLAYER_API_KEY=your-token pluglayer-mcp\n\n"
+            "WARNING: PlugLayer authentication is not configured.\n"
+            "Save PLUGLAYER_API_KEY in ~/.pluglayer/credentials.env or set it "
+            "in the MCP server environment.\n"
+            "The server will stay available and read saved credentials on the "
+            "next tool call; no reload is required.\n"
+            "Client OAuth/mcp_auth actions do not configure local stdio auth.\n\n"
             "Get your token from: https://portal.pluglayer.com/settings",
             file=sys.stderr,
         )

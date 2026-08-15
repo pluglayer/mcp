@@ -5,7 +5,7 @@ import httpx
 
 from pluglayer_mcp.credentials import resolve_api_base_url, resolve_api_key
 
-_USER_AGENT = "pluglayer-mcp/0.1.5"
+_USER_AGENT = "pluglayer-mcp/0.1.6"
 
 
 def _stringify_detail(detail: Any) -> str:
@@ -75,11 +75,15 @@ class PlugLayerClient:
 
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
         self._explicit_api_key = api_key
-        self.base_url = resolve_api_base_url(base_url).rstrip("/")
+        self._explicit_base_url = base_url
 
     @property
     def api_key(self) -> str:
         return resolve_api_key(self._explicit_api_key)
+
+    @property
+    def base_url(self) -> str:
+        return resolve_api_base_url(self._explicit_base_url).rstrip("/")
 
     @property
     def headers(self) -> dict:
