@@ -68,8 +68,10 @@ EXPECTED_TOOL_NAMES = {
     "attach_node_to_project",
     "detach_node_from_project",
     "rename_project",
+    "update_project_metadata",
     "submit_feedback",
     "get_feedback",
+    "update_my_feedback",
 }
 
 

@@ -264,7 +264,9 @@ def register_compute_tools(mcp):
             for node in nodes:
                 state = node.get("attachment_state", "unknown").replace("_", " ")
                 project = f" | current project: `{node.get('project_id')}`" if node.get("project_id") else ""
-                lines.append(f"{_fmt_node(node).rstrip()}   Attachment: {state}{project}\n")
+                blocker = node.get("attachment_blocker") or {}
+                blocker_text = f" | blocked: {blocker.get('message')}" if blocker.get("message") else ""
+                lines.append(f"{_fmt_node(node).rstrip()}   Attachment: {state}{project}{blocker_text}\n")
             lines.append("Only nodes marked available can be attached. A dedicated node can belong to one project at a time.")
             return "\n".join(lines)
         except Exception as e:

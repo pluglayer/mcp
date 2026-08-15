@@ -142,10 +142,12 @@ Marketplace template deployment through MCP now supports both:
 | `submit_feedback` | Submit authenticated, redacted product feedback with optional affected-tool, expected/actual behavior, error, and page context |
 | `list_my_feedback` | List the authenticated user's feedback tickets and statuses |
 | `get_feedback` | Inspect one feedback ticket and its current resolution note |
+| `update_my_feedback` | Update the title or description of an owned feedback ticket without changing its admin-managed status |
 | `list_projects` | List authenticated user's projects |
 | `get_my_projects` | Alias for listing the current user's projects |
 | `create_project` | Create a new project namespace |
 | `rename_project` | Rename a project's display name without changing its slug, namespace, or existing app URLs |
+| `update_project_metadata` | Update a project's display name and/or description without changing routing identity or custom domains |
 | `get_project` | Get project details, current apps in the project, and attached custom-domain state |
 | `remove_project` | Remove one of the user's projects by deleting its apps first, requesting namespace cleanup, and then archiving the project record/history |
 | `delete_project` | Alias for `remove_project` |
@@ -154,7 +156,7 @@ Marketplace template deployment through MCP now supports both:
 | `get_my_available_computes` | Alias for available compute capacity |
 | `estimate_compute` | Estimate required compute, monthly price, and a tailored offer link; preferred before purchase/allocation decisions |
 | `list_nodes` | List accessible compute nodes |
-| `list_attachable_project_nodes` | List owner-held dedicated nodes and their project attachment state |
+| `list_attachable_project_nodes` | List owner-held dedicated nodes and their project attachment state; legacy records that duplicate another physical worker are explicitly blocked |
 | `attach_node_to_project` | Attach an available dedicated node to one project (owner-only, idempotent) |
 | `detach_node_from_project` | Detach an unused dedicated node after explicit confirmation; active apps block it |
 | `list_registries` | List the registries currently available to the user |
@@ -177,7 +179,7 @@ Marketplace template deployment through MCP now supports both:
 | `deploy_marketplace_template` | Deploy a marketplace template into an existing project or create a new project inline during the same MCP flow |
 | `exec_app_terminal` | Execute a command in the caller's own deployed app container with a fixed 360-second timeout; keep terminal input at or below 10,000 characters and about 350 lines |
 | `redeploy` | Redeploy an app after confirming the exact app name; the existing slug stays unchanged |
-| `restart_app` | Alias for restarting an app by redeploying it |
+| `restart_app` | Restart an app through a verified rollout; completion requires the task's new pod-template revision to be live |
 | `rollback` | Roll back to previous version |
 | `remove_app` | Remove one of the user's apps, tear down its runtime workload, revoke active routing, and mark it as removed |
 | `delete_app` | Alias for `remove_app` |

@@ -115,6 +115,8 @@ def test_every_plugin_exposes_feedback_intelligence():
         assert skill.exists(), f"{root.name} is missing share-feedback"
         text = skill.read_text(encoding="utf-8")
         assert "submit_feedback" in text
+        if root.name != "pluglayer-codex-ops-plugin":
+            assert "update_my_feedback" in text
         assert "credentials" in text or "tokens" in text
         assert "full logs" in text
 
@@ -146,3 +148,21 @@ def test_every_plugin_exposes_feedback_intelligence():
         workflow = (workflows / filename).read_text(encoding="utf-8")
         for fragment in expected_fragments:
             assert fragment in workflow, f"{filename} does not validate {fragment}"
+
+
+def test_public_plugins_expose_project_metadata_updates():
+    repo_root = Path(__file__).resolve().parents[2]
+    plugins = repo_root / "plugins"
+    roots = [
+        plugins / "pluglayer-codex-plugin",
+        plugins / "pluglayer-claude-plugin",
+        plugins / "pluglayer-cursor-plugin",
+        plugins / "pluglayer-antigravity-plugin",
+    ]
+
+    for root in roots:
+        deploy_skill = root / "skills" / "deploy-app" / "SKILL.md"
+        text = deploy_skill.read_text(encoding="utf-8")
+        assert "update_project_metadata" in text
+        assert "description" in text
+        assert "custom-domain" in text or "custom domain" in text
