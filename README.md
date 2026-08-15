@@ -149,7 +149,7 @@ Marketplace template deployment through MCP now supports both:
 | `get_project` | Get project details, current apps in the project, and attached custom-domain state |
 | `remove_project` | Remove one of the user's projects by deleting its apps first, requesting namespace cleanup, and then archiving the project record/history |
 | `delete_project` | Alias for `remove_project` |
-| `get_compute_summary` | Show account-level capacity, or pass `project_id` for attached-node capacity and usage; estimate first when sizing is unclear |
+| `get_compute_summary` | Show account-level capacity, or pass `project_id` for attached-node recorded allocation plus live scheduler headroom; estimate first when sizing is unclear |
 | `get_my_available_compute` | Show the current user's available compute capacity; pair with estimate first for planning |
 | `get_my_available_computes` | Alias for available compute capacity |
 | `estimate_compute` | Estimate required compute, monthly price, and a tailored offer link; preferred before purchase/allocation decisions |
@@ -159,8 +159,8 @@ Marketplace template deployment through MCP now supports both:
 | `detach_node_from_project` | Detach an unused dedicated node after explicit confirmation; active apps block it |
 | `list_registries` | List the registries currently available to the user |
 | `deploy_image` | Mirror a Docker image into PlugLayer's managed Docker Hub namespace, then deploy it after backend compute checks; if a similar app already exists and the namespace is full, use update/replace flow instead of a brand-new app |
-| `upload_image_archive_and_deploy` | Upload a locally built image archive from the user's machine; if the target app already exists, switch to the app upload-first redeploy flow, otherwise create and deploy a new app |
-| `upload_image_archive_and_redeploy_app` | Upload a newly rebuilt image archive for an existing app, push it with a new tag, keep the slug unchanged, and redeploy that app |
+| `upload_image_archive_and_deploy` | Upload a locally built Docker or OCI tar archive from the user's machine; if the target app already exists, switch to the app upload-first redeploy flow, otherwise create and deploy a new app |
+| `upload_image_archive_and_redeploy_app` | Upload a newly rebuilt Docker or OCI tar archive for an existing app, push it with a new tag, keep the slug unchanged, and queue that app's redeploy |
 | `deploy_compose` | Analyze docker-compose.yml, split it into separate deploy units, route known databases through Data Layer templates, deploy remaining services as separate apps, and require uploaded archives for local-build services |
 | `analyze_compose_deploy_plan` | Preview how PlugLayer will split a docker-compose stack into Data Layer databases, separate compose apps, and local-build image services |
 | `get_compose_local_build_commands` | Generate exact `docker buildx`, smoke-test, and OCI export commands for local-build compose services before they are uploaded and deployed |

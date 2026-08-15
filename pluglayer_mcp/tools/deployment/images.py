@@ -191,7 +191,7 @@ def register_images_tools(mcp):
                         "tag": tag,
                         "registry_id": registry_id or "",
                         "redeploy_strategy": redeploy_strategy,
-                        "wait_seconds": "45",
+                        "wait_seconds": "0",
                     },
                     file_field="archive",
                     file_path=image_archive_path,
@@ -290,7 +290,7 @@ def register_images_tools(mcp):
         tag: str = "latest",
         registry_id: str = "",
         redeploy_strategy: str = "recreate",
-        wait_seconds: int = 45,
+        wait_seconds: int = 0,
     ) -> str:
         """Rebuild flow for existing apps: upload a newly built image archive, push it with a new tag, keep the current slug, and redeploy the existing app."""
         try:

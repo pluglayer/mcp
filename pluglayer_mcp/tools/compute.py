@@ -36,7 +36,7 @@ def _fmt_project_scope(scope: dict[str, Any] | None) -> list[str]:
         f"\n📁 **Project scope: {scope.get('project_name')}**",
         f"Nodes attached to this project: {scope.get('node_count', 0)}",
         (
-            "Project usage: "
+            "Recorded project allocation: "
             f"{_fmt_usage_over_allocated(scope.get('used'), scope.get('capacity'))}"
             + (" (capacity includes the user's shared reservation)" if scope.get("includes_shared_reservation") else "")
         ),
@@ -44,10 +44,17 @@ def _fmt_project_scope(scope: dict[str, Any] | None) -> list[str]:
     for node in scope.get("nodes") or []:
         kind = "shared" if node.get("is_shared") else "dedicated"
         used = node.get("used_by_project") or {}
+        live_free = node.get("live_free")
+        live_label = (
+            f", live free: {_compute_value(live_free, 'cpu_cores')} CPU / "
+            f"{_compute_value(live_free, 'ram_gb')}GB RAM"
+            if live_free is not None
+            else ", live free: unavailable"
+        )
         lines.append(
             f"- {node.get('node_name')} ({kind}, {node.get('status')}): "
             f"{_compute_value(used, 'cpu_cores')} CPU / {_compute_value(used, 'ram_gb')}GB RAM used by this project, "
-            f"{len(node.get('apps') or [])} app(s)"
+            f"{len(node.get('apps') or [])} app(s){live_label}"
         )
     return lines
 

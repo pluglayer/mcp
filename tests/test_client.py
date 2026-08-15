@@ -81,3 +81,45 @@ def test_patch_sends_json_and_unwraps_envelope(monkeypatch):
     assert result["project"]["name"] == "Renamed"
     assert captured["method"] == "PATCH"
     assert captured["json"] == {"name": "Renamed"}
+
+
+def test_multipart_uses_long_streaming_timeouts(monkeypatch, tmp_path):
+    captured = {}
+    archive = tmp_path / "image.tar"
+    archive.write_bytes(b"archive")
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout):
+            captured["timeout"] = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, *, headers, data, files):
+            captured.update({"url": url, "data": data, "files": files})
+            return httpx.Response(
+                200,
+                json={"ok": True, "data": {"task_id": "task-1"}},
+                request=httpx.Request("POST", url),
+            )
+
+    monkeypatch.setattr("pluglayer_mcp.client.httpx.AsyncClient", FakeAsyncClient)
+    client = PlugLayerClient(api_key="test-key", base_url="https://api.example.test")
+
+    result = asyncio.run(
+        client.post_multipart(
+            "/v1/plugin/apps/app-1/upload-image-redeploy",
+            form_data={"wait_seconds": "0"},
+            file_field="archive",
+            file_path=str(archive),
+        )
+    )
+
+    assert result == {"task_id": "task-1"}
+    assert captured["timeout"].connect == 30.0
+    assert captured["timeout"].pool == 30.0
+    assert captured["timeout"].read == 1800.0
+    assert captured["timeout"].write == 1800.0
