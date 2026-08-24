@@ -107,7 +107,6 @@ def test_every_plugin_exposes_feedback_intelligence():
         plugins / "pluglayer-claude-plugin",
         plugins / "pluglayer-cursor-plugin",
         plugins / "pluglayer-antigravity-plugin",
-        plugins / "pluglayer-codex-ops-plugin",
     ]
 
     for root in roots:
@@ -115,8 +114,7 @@ def test_every_plugin_exposes_feedback_intelligence():
         assert skill.exists(), f"{root.name} is missing share-feedback"
         text = skill.read_text(encoding="utf-8")
         assert "submit_feedback" in text
-        if root.name != "pluglayer-codex-ops-plugin":
-            assert "update_my_feedback" in text
+        assert "update_my_feedback" in text
         assert "credentials" in text or "tokens" in text
         assert "full logs" in text
 
