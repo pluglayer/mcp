@@ -36,7 +36,7 @@ def _fmt_project_scope(scope: dict[str, Any] | None) -> list[str]:
         f"\n📁 **Project scope: {scope.get('project_name')}**",
         f"Nodes attached to this project: {scope.get('node_count', 0)}",
         (
-            "Project usage: "
+            "Recorded project allocation: "
             f"{_fmt_usage_over_allocated(scope.get('used'), scope.get('capacity'))}"
             + (" (capacity includes the user's shared reservation)" if scope.get("includes_shared_reservation") else "")
         ),
@@ -44,10 +44,17 @@ def _fmt_project_scope(scope: dict[str, Any] | None) -> list[str]:
     for node in scope.get("nodes") or []:
         kind = "shared" if node.get("is_shared") else "dedicated"
         used = node.get("used_by_project") or {}
+        live_free = node.get("live_free")
+        live_label = (
+            f", live free: {_compute_value(live_free, 'cpu_cores')} CPU / "
+            f"{_compute_value(live_free, 'ram_gb')}GB RAM"
+            if live_free is not None
+            else ", live free: unavailable"
+        )
         lines.append(
             f"- {node.get('node_name')} ({kind}, {node.get('status')}): "
             f"{_compute_value(used, 'cpu_cores')} CPU / {_compute_value(used, 'ram_gb')}GB RAM used by this project, "
-            f"{len(node.get('apps') or [])} app(s)"
+            f"{len(node.get('apps') or [])} app(s){live_label}"
         )
     return lines
 
@@ -257,7 +264,9 @@ def register_compute_tools(mcp):
             for node in nodes:
                 state = node.get("attachment_state", "unknown").replace("_", " ")
                 project = f" | current project: `{node.get('project_id')}`" if node.get("project_id") else ""
-                lines.append(f"{_fmt_node(node).rstrip()}   Attachment: {state}{project}\n")
+                blocker = node.get("attachment_blocker") or {}
+                blocker_text = f" | blocked: {blocker.get('message')}" if blocker.get("message") else ""
+                lines.append(f"{_fmt_node(node).rstrip()}   Attachment: {state}{project}{blocker_text}\n")
             lines.append("Only nodes marked available can be attached. A dedicated node can belong to one project at a time.")
             return "\n".join(lines)
         except Exception as e:

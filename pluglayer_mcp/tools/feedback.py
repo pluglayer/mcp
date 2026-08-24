@@ -115,7 +115,7 @@ def register_feedback_tools(mcp):
 
     @mcp.tool()
     async def list_my_feedback(limit: int = 20) -> str:
-        """List feedback submitted by the authenticated PlugLayer user."""
+        """List feedback submitted by the authenticated PlugLayer user and show each status."""
         try:
             payload = await _client().get("/v1/plugin/feedback", params={"limit": min(max(limit, 1), 100)})
             items = payload.get("feedback", [])
@@ -127,7 +127,7 @@ def register_feedback_tools(mcp):
 
     @mcp.tool()
     async def get_feedback(feedback_id: str) -> str:
-        """Get one feedback ticket owned by the authenticated PlugLayer user."""
+        """Get one owned feedback ticket, including its status and resolution note."""
         try:
             payload = await _client().get(f"/v1/plugin/feedback/{feedback_id}")
             item = payload.get("feedback", payload)
@@ -143,3 +143,39 @@ def register_feedback_tools(mcp):
             )
         except Exception as exc:
             return _compact_error("Error loading feedback", exc)
+
+    @mcp.tool()
+    async def update_my_feedback(
+        feedback_id: str,
+        title: str = "",
+        description: str = "",
+    ) -> str:
+        """Update the title or description of feedback owned by the authenticated user.
+
+        Use this to clarify a report or consolidate repetitive feedback. List existing tickets
+        first when a new report may duplicate one. Status and resolution remain admin-managed.
+        Never include credentials, environment values, private source, or full logs.
+        """
+        cleaned_id = (feedback_id or "").strip()
+        if not cleaned_id:
+            return "Error updating feedback: feedback_id is required."
+
+        updates = {}
+        if title:
+            updates["title"] = _safe_optional(title, 140)
+        if description:
+            updates["description"] = _safe_optional(description, 6000)
+        if not updates:
+            return "Error updating feedback: provide a new title or description."
+
+        try:
+            payload = await _client().patch(f"/v1/plugin/feedback/{cleaned_id}", data=updates)
+            item = payload.get("feedback", payload)
+            return (
+                "✅ Feedback updated.\n"
+                f"Ticket: `{item.get('id', cleaned_id)}`\n"
+                f"Status: {item.get('status', 'unknown')}\n"
+                f"Title: {item.get('title', updates.get('title', 'unchanged'))}"
+            )
+        except Exception as exc:
+            return _compact_error("Error updating feedback", exc)
