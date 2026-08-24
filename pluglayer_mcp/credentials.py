@@ -9,14 +9,16 @@ from pathlib import Path
 from pluglayer_mcp.settings import settings
 
 _AUTH_CONFIGURATION_ERROR = (
-    "PlugLayer authentication is not configured. Add a PlugLayer API token, "
-    "then restart or reload the MCP server."
+    "PlugLayer authentication is not configured. Save PLUGLAYER_API_KEY in "
+    "~/.pluglayer/credentials.env or set it in the MCP server environment. "
+    "OAuth/mcp_auth does not configure a local stdio server. After saving the "
+    "token, retry the tool; a server reload is not required."
 )
 _UNSAFE_TOKEN_ERROR = (
     "PlugLayer authentication is invalid because the configured API token "
-    "contains a control character. Save the token again, then restart or "
-    "reload the MCP server."
+    "contains a control character. Save the token again, then retry the tool."
 )
+_DEFAULT_CREDENTIALS_FILE = "~/.pluglayer/credentials.env"
 
 
 def _credential_file_path() -> Path | None:
@@ -25,7 +27,7 @@ def _credential_file_path() -> Path | None:
         or settings.PLUGLAYER_CREDENTIALS_FILE
     ).strip()
     if not configured:
-        return None
+        configured = _DEFAULT_CREDENTIALS_FILE
     expanded = os.path.expandvars(os.path.expanduser(configured))
     return Path(expanded)
 
@@ -43,6 +45,8 @@ def _parse_assignment(line: str, key: str) -> str | None:
         parsed = shlex.split(raw_value.strip(), posix=True)
     except ValueError:
         return None
+    if not parsed and not raw_value.strip():
+        return ""
     if len(parsed) != 1:
         return None
     return parsed[0]

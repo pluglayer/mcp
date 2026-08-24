@@ -56,6 +56,7 @@ def test_feedback_tools_submit_and_read(monkeypatch):
     class FakeClient:
         def __init__(self):
             self.form = None
+            self.patch_data = None
 
         async def post_form(self, path, data):
             assert path == "/v1/plugin/feedback"
@@ -95,6 +96,18 @@ def test_feedback_tools_submit_and_read(monkeypatch):
                 }
             }
 
+        async def patch(self, path, data):
+            assert path == "/v1/plugin/feedback/feedback-1"
+            self.patch_data = data
+            return {
+                "feedback": {
+                    "id": "feedback-1",
+                    "title": data.get("title", "Deployment timed out"),
+                    "description": data.get("description", "The rollout did not complete."),
+                    "status": "resolving",
+                }
+            }
+
     fake_client = FakeClient()
     monkeypatch.setattr(feedback_tools, "_client", lambda: fake_client)
     mcp = FakeMCP()
@@ -111,11 +124,31 @@ def test_feedback_tools_submit_and_read(monkeypatch):
     )
     listed = asyncio.run(mcp.tools["list_my_feedback"](150))
     loaded = asyncio.run(mcp.tools["get_feedback"]("feedback-1"))
+    updated = asyncio.run(
+        mcp.tools["update_my_feedback"](
+            "feedback-1",
+            "Consolidated deployment report",
+            "Combined details; PLUGLAYER_API_KEY=secret-update must stay hidden.",
+        )
+    )
 
     assert "feedback-1" in submitted
     assert "secret-value" not in fake_client.form["description"]
     assert "Deployment timed out" in listed
     assert "Investigating rollout readiness" in loaded
+    assert "Feedback updated" in updated
+    assert "Status: resolving" in updated
+    assert "secret-update" not in fake_client.patch_data["description"]
+
+
+def test_update_feedback_requires_an_owned_ticket_id_and_new_text(monkeypatch):
+    mcp = FakeMCP()
+    register_feedback_tools(mcp)
+
+    assert "feedback_id is required" in asyncio.run(mcp.tools["update_my_feedback"](""))
+    assert "provide a new title or description" in asyncio.run(
+        mcp.tools["update_my_feedback"]("feedback-1")
+    )
 
 
 def test_post_form_uses_form_encoding_and_unwraps_envelope(monkeypatch):

@@ -56,6 +56,7 @@ def register_identity_project_tools(mcp):
                 lines.append(
                     f"{_status_emoji(status)} **{p.get('name')}** (id: `{p.get('id')}`)\n"
                     f"   Status: {status} | Apps: {p.get('deployment_count', 0)} | Access: {role} ({scope}; {action_hint})\n"
+                    f"   Description: {p.get('description') or 'not set'}\n"
                     f"   Namespace: `{p.get('namespace')}`\n"
                     f"   URL pattern: {p.get('base_url', 'N/A')}\n"
                 )
@@ -153,6 +154,75 @@ def register_identity_project_tools(mcp):
 
 
     @mcp.tool()
+    async def update_project_metadata(
+        project_id: str,
+        name: str = "",
+        description: str = "",
+        clear_description: bool = False,
+    ) -> str:
+        """Update a project's display name and/or description.
+
+        The caller must have project write access. Set clear_description=true to remove the
+        current description. This never changes the project slug, Kubernetes namespace,
+        existing app URLs, or custom-domain routing; use the domain tools for domains.
+        """
+        clean_project_id = (project_id or "").strip()
+        if not clean_project_id:
+            return "❌ Project ID is required."
+
+        updates = {}
+        if name:
+            clean_name = name.strip()
+            if len(clean_name) < 2 or len(clean_name) > 50:
+                return "❌ Project name must be between 2 and 50 characters."
+            updates["name"] = clean_name
+        if clear_description and description:
+            return "❌ Provide a description or set clear_description=true, not both."
+        if clear_description:
+            updates["description"] = ""
+        elif description:
+            clean_description = description.strip()
+            if not clean_description:
+                return "❌ Use clear_description=true to remove the project description."
+            updates["description"] = clean_description
+        if not updates:
+            return "❌ Provide a project name, description, or clear_description=true."
+
+        try:
+            data = await _client().patch(
+                f"/v1/plugin/projects/{clean_project_id}",
+                updates,
+            )
+            project = data.get("project", data)
+            await _remember_context(
+                {
+                    "last_completed_task": {
+                        "type": "update_project_metadata",
+                        "project_id": clean_project_id,
+                        "project_name": project.get("name"),
+                    },
+                    "projects": {
+                        clean_project_id: {
+                            "name": project.get("name"),
+                            "description": project.get("description"),
+                            "namespace": project.get("namespace"),
+                        }
+                    },
+                }
+            )
+            return (
+                "✅ Project metadata updated.\n"
+                f"Project: **{project.get('name', updates.get('name', 'unknown'))}** (`{clean_project_id}`)\n"
+                f"Description: {project.get('description') or 'not set'}\n"
+                f"Slug unchanged: `{project.get('slug', 'unknown')}`\n"
+                f"Namespace unchanged: `{project.get('namespace', 'unknown')}`\n\n"
+                "Existing app URLs and custom-domain routing are unchanged."
+            )
+        except Exception as e:
+            return _compact_error("Error updating project metadata", e)
+
+
+    @mcp.tool()
     async def get_project(project_id: str) -> str:
         """Get project details for one of the authenticated user's projects."""
         try:
@@ -169,6 +239,7 @@ def register_identity_project_tools(mcp):
                 f"ID: `{p.get('id')}`\n"
                 f"Status: {status}\n"
                 f"Access: {role}{' (shared with me)' if p.get('shared_with_me') else ' (owned)'}\n"
+                f"Description: {p.get('description') or 'not set'}\n"
                 f"Namespace: `{p.get('namespace')}`\n"
                 f"URL pattern: {p.get('base_url', 'N/A')}\n"
                 f"Apps: {p.get('deployment_count', 0)}"

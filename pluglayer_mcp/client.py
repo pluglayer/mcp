@@ -5,7 +5,7 @@ import httpx
 
 from pluglayer_mcp.credentials import resolve_api_base_url, resolve_api_key
 
-_USER_AGENT = "pluglayer-mcp/0.1.5"
+_USER_AGENT = "pluglayer-mcp/0.1.10"
 
 
 def _stringify_detail(detail: Any) -> str:
@@ -75,11 +75,15 @@ class PlugLayerClient:
 
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
         self._explicit_api_key = api_key
-        self.base_url = resolve_api_base_url(base_url).rstrip("/")
+        self._explicit_base_url = base_url
 
     @property
     def api_key(self) -> str:
         return resolve_api_key(self._explicit_api_key)
+
+    @property
+    def base_url(self) -> str:
+        return resolve_api_base_url(self._explicit_base_url).rstrip("/")
 
     @property
     def headers(self) -> dict:
@@ -166,7 +170,7 @@ class PlugLayerClient:
         file_field: str,
         file_path: str,
         content_type: str = "application/octet-stream",
-        timeout: float = 600.0,
+        timeout: float = 1800.0,
     ) -> Any:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -176,7 +180,13 @@ class PlugLayerClient:
             files = {
                 file_field: (file_path.split("/")[-1], fh, content_type),
             }
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            upload_timeout = httpx.Timeout(
+                connect=30.0,
+                read=timeout,
+                write=timeout,
+                pool=30.0,
+            )
+            async with httpx.AsyncClient(timeout=upload_timeout) as client:
                 try:
                     resp = await client.post(
                         f"{self.base_url}{path}",

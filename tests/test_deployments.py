@@ -1,8 +1,10 @@
 import asyncio
+import inspect
 
 from pluglayer_mcp.tools.deployment import app_read
 from pluglayer_mcp.tools.deployment.app_operations import register_app_operations_tools
 from pluglayer_mcp.tools.deployment.app_read import register_app_read_tools
+from pluglayer_mcp.tools.deployment.images import register_images_tools
 from pluglayer_mcp.tools.deployments import _compose_build_commands, _find_existing_project_app_match
 
 
@@ -56,6 +58,26 @@ def test_find_existing_project_app_match_falls_back_to_name():
 
     assert match
     assert match["id"] == "9"
+
+
+def test_uploaded_image_redeploy_queues_without_synchronous_wait_by_default():
+    class FakeMCP:
+        def __init__(self):
+            self.tools = {}
+
+        def tool(self):
+            def register(function):
+                self.tools[function.__name__] = function
+                return function
+
+            return register
+
+    mcp = FakeMCP()
+    register_images_tools(mcp)
+
+    signature = inspect.signature(mcp.tools["upload_image_archive_and_redeploy_app"])
+
+    assert signature.parameters["wait_seconds"].default == 0
 
 
 def test_get_app_logs_preserves_get_logs_alias(monkeypatch):

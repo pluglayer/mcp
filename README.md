@@ -20,6 +20,12 @@ PLUGLAYER_API_KEY=your-pluglayer-api-token pluglayer-mcp
 
 ## Configuration
 
+For editor installations, PlugLayer also reads
+`~/.pluglayer/credentials.env` on every tool call. Saving or rotating
+`PLUGLAYER_API_KEY` (and optionally `PLUGLAYER_API_URL`) there takes effect on
+the next call without restarting the server. A client's OAuth or generic
+`mcp_auth` action does not configure credentials for a local `stdio` server.
+
 ### Claude Desktop
 Add to `~/.config/Claude/claude_desktop_config.json`:
 
@@ -42,16 +48,23 @@ Add to `~/.config/Claude/claude_desktop_config.json`:
 Add to `~/.cursor/mcp.json`:
 ```json
 {
-  "pluglayer": {
-    "command": "uvx",
-    "type": "stdio",
-    "args": ["pluglayer-mcp"],
-    "env": {
-      "PLUGLAYER_API_KEY": "your-pluglayer-api-token"
+  "mcpServers": {
+    "pluglayer": {
+      "command": "uvx",
+      "type": "stdio",
+      "args": ["pluglayer-mcp@latest"],
+      "env": {
+        "PLUGLAYER_API_KEY": "your-pluglayer-api-token"
+      }
     }
   }
 }
 ```
+
+Use either this manual registration or the PlugLayer Cursor plugin's bundled
+server, not both. If both appear in Cursor's Tools & MCP settings, disable or
+remove the manual copy so tool calls cannot land on servers with different
+authentication state.
 
 ### Remote HTTP (hosted)
 The remote MCP server runs at `mcp.pluglayer.com`. Pass your token as:
@@ -129,25 +142,27 @@ Marketplace template deployment through MCP now supports both:
 | `submit_feedback` | Submit authenticated, redacted product feedback with optional affected-tool, expected/actual behavior, error, and page context |
 | `list_my_feedback` | List the authenticated user's feedback tickets and statuses |
 | `get_feedback` | Inspect one feedback ticket and its current resolution note |
+| `update_my_feedback` | Update the title or description of an owned feedback ticket without changing its admin-managed status |
 | `list_projects` | List authenticated user's projects |
 | `get_my_projects` | Alias for listing the current user's projects |
 | `create_project` | Create a new project namespace |
 | `rename_project` | Rename a project's display name without changing its slug, namespace, or existing app URLs |
+| `update_project_metadata` | Update a project's display name and/or description without changing routing identity or custom domains |
 | `get_project` | Get project details, current apps in the project, and attached custom-domain state |
 | `remove_project` | Remove one of the user's projects by deleting its apps first, requesting namespace cleanup, and then archiving the project record/history |
 | `delete_project` | Alias for `remove_project` |
-| `get_compute_summary` | Show account-level capacity, or pass `project_id` for attached-node capacity and usage; estimate first when sizing is unclear |
+| `get_compute_summary` | Show account-level capacity, or pass `project_id` for attached-node recorded allocation plus live scheduler headroom; estimate first when sizing is unclear |
 | `get_my_available_compute` | Show the current user's available compute capacity; pair with estimate first for planning |
 | `get_my_available_computes` | Alias for available compute capacity |
 | `estimate_compute` | Estimate required compute, monthly price, and a tailored offer link; preferred before purchase/allocation decisions |
 | `list_nodes` | List accessible compute nodes |
-| `list_attachable_project_nodes` | List owner-held dedicated nodes and their project attachment state |
+| `list_attachable_project_nodes` | List owner-held dedicated nodes and their project attachment state; legacy records that duplicate another physical worker are explicitly blocked |
 | `attach_node_to_project` | Attach an available dedicated node to one project (owner-only, idempotent) |
 | `detach_node_from_project` | Detach an unused dedicated node after explicit confirmation; active apps block it |
 | `list_registries` | List the registries currently available to the user |
 | `deploy_image` | Mirror a Docker image into PlugLayer's managed Docker Hub namespace, then deploy it after backend compute checks; if a similar app already exists and the namespace is full, use update/replace flow instead of a brand-new app |
-| `upload_image_archive_and_deploy` | Upload a locally built image archive from the user's machine; if the target app already exists, switch to the app upload-first redeploy flow, otherwise create and deploy a new app |
-| `upload_image_archive_and_redeploy_app` | Upload a newly rebuilt image archive for an existing app, push it with a new tag, keep the slug unchanged, and redeploy that app |
+| `upload_image_archive_and_deploy` | Upload a locally built Docker or OCI tar archive from the user's machine; if the target app already exists, switch to the app upload-first redeploy flow, otherwise create and deploy a new app |
+| `upload_image_archive_and_redeploy_app` | Upload a newly rebuilt Docker or OCI tar archive for an existing app, push it with a new tag, keep the slug unchanged, and queue that app's redeploy |
 | `deploy_compose` | Analyze docker-compose.yml, split it into separate deploy units, route known databases through Data Layer templates, deploy remaining services as separate apps, and require uploaded archives for local-build services |
 | `analyze_compose_deploy_plan` | Preview how PlugLayer will split a docker-compose stack into Data Layer databases, separate compose apps, and local-build image services |
 | `get_compose_local_build_commands` | Generate exact `docker buildx`, smoke-test, and OCI export commands for local-build compose services before they are uploaded and deployed |
@@ -164,7 +179,7 @@ Marketplace template deployment through MCP now supports both:
 | `deploy_marketplace_template` | Deploy a marketplace template into an existing project or create a new project inline during the same MCP flow |
 | `exec_app_terminal` | Execute a command in the caller's own deployed app container with a fixed 360-second timeout; keep terminal input at or below 10,000 characters and about 350 lines |
 | `redeploy` | Redeploy an app after confirming the exact app name; the existing slug stays unchanged |
-| `restart_app` | Alias for restarting an app by redeploying it |
+| `restart_app` | Restart an app through a verified rollout; completion requires the task's new pod-template revision to be live |
 | `rollback` | Roll back to previous version |
 | `remove_app` | Remove one of the user's apps, tear down its runtime workload, revoke active routing, and mark it as removed |
 | `delete_app` | Alias for `remove_app` |
