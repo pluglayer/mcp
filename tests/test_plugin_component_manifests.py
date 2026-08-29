@@ -85,6 +85,36 @@ def test_cursor_installer_warns_about_duplicate_mcp_registration():
     assert "different authentication state" in installer
 
 
+def test_every_public_installer_supports_portal_quick_setup():
+    repo_root = Path(__file__).resolve().parents[2]
+    plugin_roots = [
+        "pluglayer-codex-plugin",
+        "pluglayer-claude-plugin",
+        "pluglayer-cursor-plugin",
+        "pluglayer-antigravity-plugin",
+    ]
+
+    for plugin_root in plugin_roots:
+        installer = (
+            repo_root / "plugins" / plugin_root / "install-common.sh"
+        ).read_text(encoding="utf-8")
+        assert 'PLUGLAYER_QUICK_INSTALL="${PLUGLAYER_QUICK_INSTALL:-0}"' in installer
+        assert 'if [ "${PLUGLAYER_QUICK_INSTALL}" = "1" ]; then' in installer
+        assert "install_target" in installer
+        assert "restart_instructions" in installer
+
+
+def test_codex_installer_uses_the_personal_marketplace_plugin_directory():
+    repo_root = Path(__file__).resolve().parents[2]
+    installer = (
+        repo_root / "plugins" / "pluglayer-codex-plugin" / "install-common.sh"
+    ).read_text(encoding="utf-8")
+
+    assert 'MARKETPLACE_FILE="${HOME}/.agents/plugins/marketplace.json"' in installer
+    assert 'MARKETPLACE_PLUGIN_DIR="${HOME}/.agents/plugins/plugins"' in installer
+    assert 'MARKETPLACE_PLUGIN_DIR="${HOME}/plugins"' not in installer
+
+
 def test_mcp_python_sdk_stays_on_fastmcp_compatible_v1():
     repo_root = Path(__file__).resolve().parents[2]
     with (repo_root / "pluglayer-mcp" / "pyproject.toml").open("rb") as handle:
