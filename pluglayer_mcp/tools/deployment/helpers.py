@@ -140,6 +140,9 @@ def _build_template_env_overrides(
         key = env_var.get("key")
         if not key or overrides.get(key):
             continue
+        if env_var.get("database_binding"):
+            # The backend resolves these against the selected project/database.
+            continue
         resolved = _resolve_template_value(str(env_var.get("value") or ""), app_name=app_name, route_slug=route_slug)
         if re.search(r"\{\{RANDOM_[A-Z0-9_]+\}\}", resolved):
             overrides[key] = _random_secret()
@@ -431,4 +434,3 @@ def _post_deploy_suggestions(app: dict, project_apps: list[dict]) -> list[str]:
                 )
                 break
     return suggestions
-

@@ -111,6 +111,7 @@ def register_marketplace_tools(mcp):
         storage_gb: int = 0,
         env_overrides: dict[str, str] | None = None,
         tcp_allowed_cidrs: list[str] | None = None,
+        database_bindings: dict[str, str] | None = None,
     ) -> str:
         """Deploy a marketplace template into an existing project or a brand-new project created during the same flow. Secret-like required env vars are auto-resolved here before the deploy request is sent."""
         try:
@@ -143,6 +144,7 @@ def register_marketplace_tools(mcp):
                 "memory_limit": memory_limit or None,
                 "storage_gb": storage_gb or None,
                 "tcp_allowed_cidrs": tcp_allowed_cidrs or [],
+                "database_bindings": database_bindings or {},
             }
             data = await _client().post(f"/v1/plugin/marketplace/templates/{template_id}/deploy", payload)
             task_id = data.get("task_id")
