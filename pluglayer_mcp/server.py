@@ -106,6 +106,7 @@ from pluglayer_mcp.tools.compute import register_compute_tools
 from pluglayer_mcp.tools.deployments import register_deployment_tools
 from pluglayer_mcp.tools.domains import register_domain_tools
 from pluglayer_mcp.tools.feedback import register_feedback_tools
+from pluglayer_mcp.tools.templates import register_template_tools
 from pluglayer_mcp.tools.identity_projects import register_identity_project_tools
 from pluglayer_mcp.tools.tasks_admin import register_task_tools
 from pluglayer_mcp.tools.user_context import register_user_context_tools
@@ -118,6 +119,7 @@ register_domain_tools(mcp)
 register_task_tools(mcp)
 register_cicd_health_tools(mcp)
 register_feedback_tools(mcp)
+register_template_tools(mcp)
 
 
 def main():

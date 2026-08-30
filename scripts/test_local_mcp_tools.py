@@ -63,6 +63,8 @@ EXPECTED_TEXT = {
 }
 
 EXPECTED_TOOL_NAMES = {
+    "get_template_authoring_schema",
+    "preview_template_compose",
     "apply_app_env_vars",
     "list_attachable_project_nodes",
     "attach_node_to_project",

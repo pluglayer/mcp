@@ -246,3 +246,16 @@ exact hostnames, so `example.com` is not automatically covered when only
 2. Create a **PlugLayer API token**
 3. Copy it once and store it safely
 4. Use it as `PLUGLAYER_API_KEY` for MCP, editor plugins, and the 3-step CI/CD actions flow
+
+## Template authoring
+
+Use `get_template_authoring_schema` and `preview_template_compose` before saving
+with `create_template_draft`. The tools also list/read/update/clone/delete private
+drafts, submit for admin approval, expose launch context/planning/sessions, and
+update existing apps from templates. `deploy_marketplace_template` handles test
+deployments and accepts `database_bindings`. Public template tools do not publish
+or approve; those actions remain in the private Admin Center.
+
+Run `python scripts/test_local_template_mcp.py` from this package for a focused
+read-only local stdio smoke using saved credentials. The new backend routes must
+be released before the corresponding MCP/plugin release can pass this check.
