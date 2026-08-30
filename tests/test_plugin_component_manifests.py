@@ -15,7 +15,13 @@ def test_public_plugins_declare_mcp_components_in_target_native_shape():
     codex_root = plugins / "pluglayer-codex-plugin"
     codex_manifest = _json(codex_root / ".codex-plugin" / "plugin.json")
     assert codex_manifest["mcpServers"] == "./.mcp.json"
-    assert "pluglayer" in _json(codex_root / ".mcp.json")
+    codex_mcp = _json(codex_root / ".mcp.json")
+    assert "pluglayer" in codex_mcp["mcpServers"]
+    assert codex_mcp["mcpServers"]["pluglayer"] == {
+        "command": "uvx",
+        "type": "stdio",
+        "args": ["pluglayer-mcp@latest"],
+    }
 
     claude_root = plugins / "pluglayer-claude-plugin"
     claude_mcp = _json(claude_root / ".mcp.json")
