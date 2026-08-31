@@ -117,8 +117,10 @@ def test_codex_installer_uses_the_personal_marketplace_plugin_directory():
     ).read_text(encoding="utf-8")
 
     assert 'MARKETPLACE_FILE="${HOME}/.agents/plugins/marketplace.json"' in installer
-    assert 'MARKETPLACE_PLUGIN_DIR="${HOME}/.agents/plugins/plugins"' in installer
-    assert 'MARKETPLACE_PLUGIN_DIR="${HOME}/plugins"' not in installer
+    assert 'MARKETPLACE_PLUGIN_DIR="${HOME}/plugins"' in installer
+    assert 'MARKETPLACE_PLUGIN_DIR="${HOME}/.agents/plugins/plugins"' not in installer
+    assert 'verify_codex_install' in installer
+    assert '/Applications/ChatGPT.app/Contents/Resources/codex' in installer
 
 
 def test_mcp_python_sdk_stays_on_fastmcp_compatible_v1():
