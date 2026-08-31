@@ -200,3 +200,22 @@ def test_public_plugins_expose_project_metadata_updates():
         assert "update_project_metadata" in text
         assert "description" in text
         assert "custom-domain" in text or "custom domain" in text
+
+
+def test_security_skills_and_target_entrypoints_ship_in_every_public_plugin():
+    repo = Path(__file__).resolve().parents[2]
+    canonical = repo / "plugins" / "pluglayer-codex-plugin" / "skills"
+    for target in ("codex", "claude", "cursor", "antigravity"):
+        root = repo / "plugins" / f"pluglayer-{target}-plugin"
+        workflow = (repo / ".github/workflows" / f"pluglayer-{target}-plugin-main.yml").read_text()
+        for skill in ("check-app-security", "manage-app-access"):
+            assert (root / "skills" / skill / "SKILL.md").read_text() == (canonical / skill / "SKILL.md").read_text()
+            assert (root / "skills" / skill / "agents/openai.yaml").is_file()
+            assert f'root / "skills" / "{skill}" / "SKILL.md"' in workflow
+        if target != "codex":
+            assert (root / "agents/pluglayer-security.md").is_file()
+            assert 'root / "agents" / "pluglayer-security.md"' in workflow
+        if target in ("cursor", "antigravity"):
+            suffix = "mdc" if target == "cursor" else "md"
+            assert (root / "rules" / f"pluglayer-security.{suffix}").is_file()
+            assert f'root / "rules" / "pluglayer-security.{suffix}"' in workflow
