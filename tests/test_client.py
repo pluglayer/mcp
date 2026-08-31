@@ -1,8 +1,32 @@
 import asyncio
 
 import httpx
+import pytest
 
 from pluglayer_mcp.client import PlugLayerClient, _extract_error_detail, _format_request_error
+
+
+@pytest.mark.parametrize("method", ["get", "post"])
+def test_optional_query_values_are_omitted_without_dropping_false_or_zero(monkeypatch, method):
+    captured = []
+
+    async def handle(request):
+        captured.append(request)
+        return httpx.Response(200, json={"ok": True, "data": {}})
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "pluglayer_mcp.client.httpx.AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(handle), **kwargs),
+    )
+    params = {"featured": None, "min_cpu_cores": None, "min_ram_gb": 0,
+              "min_storage_gb": 2.5, "enabled": False, "search": "redis"}
+    client = PlugLayerClient(api_key="test-key", base_url="https://api.example.test")
+    asyncio.run(getattr(client, method)("/v1/plugin/catalog", params=params))
+    assert dict(captured[0].url.params) == {
+        "min_ram_gb": "0", "min_storage_gb": "2.5", "enabled": "false", "search": "redis",
+    }
+    assert params["featured"] is None
 
 
 def test_extract_error_detail_reads_nested_dict_detail_message():
