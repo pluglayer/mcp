@@ -172,6 +172,8 @@ Marketplace template deployment through MCP now supports both:
 | `get_deployment_status` | Check app status and URL |
 | `get_logs` | Get app logs |
 | `get_app_logs` | Alias for getting app logs |
+| `get_app_access_policy` | Read saved IP allowlist, HTTP/TCP limits and exposure without env/connection secrets |
+| `update_app_access_policy` | Replace a complete app ingress policy through backend permission checks; exact app name and all values required |
 | `get_app_connection_env_vars` | Get concrete connection env vars and connection strings for an app/database so dependent apps can be updated correctly |
 | `apply_app_env_vars` | Securely import arbitrary runtime env vars from dotenv/`KEY=VALUE`, JSON, YAML text, or a direct key/value object; merge or replace, then optionally restart/redeploy without returning values |
 | `list_marketplace_templates` | List deployable marketplace templates before choosing one for a project |
@@ -259,3 +261,25 @@ or approve; those actions remain in the private Admin Center.
 Run `python scripts/test_local_template_mcp.py` from this package for a focused
 read-only local stdio smoke using saved credentials. The new backend routes must
 be released before the corresponding MCP/plugin release can pass this check.
+
+## App security checks and traffic controls
+
+“Check my apps” or “check my app security” starts with app inventory, status,
+recent runtime logs, and `get_app_access_policy`. The four public plugins bundle
+`check-app-security` and `manage-app-access` to distinguish abusive traffic from
+app faults, preserve legitimate clients, and carry authorized mitigations through
+verification. Check-only requests produce findings and concrete proposals.
+
+`update_app_access_policy` uses `PUT /v1/plugin/apps/{app_id}/access` and the same
+backend workflow as the portal. Read the existing policy first and provide all
+values, including the unchanged ones. An empty allowlist opens source access;
+CIDRs must represent approved trusted clients, not suspected attackers. HTTP
+limits count requests per peer IP/route/Traefik instance; TCP limits cap concurrent
+connections. Neither replaces app authentication, and internal traffic bypasses
+public ingress controls. Saves need no restart.
+
+Release the matching backend route before the MCP/plugins. Validate local stdio
+reads with `python scripts/test_local_app_security_mcp.py`; it uses saved public
+credentials and never changes live app settings or prints logs. This smoke does
+not prove policy writes or client enforcement; test those only on an explicitly
+authorized disposable app before releasing the update feature.
