@@ -100,6 +100,19 @@ def _find_existing_project_app_match(project_apps: list[dict] | None, *, name: s
     return None
 
 
+_SHELL_ENV_REFERENCE = re.compile(r"\$\{([A-Z0-9_]+)(?::-([^}]*))?\}", re.IGNORECASE)
+_WEAK_SECRET_DEFAULTS = frozenset({
+    "",
+    "change_me",
+    "changeme",
+    "changeme_at_least_64_chars",
+    "password",
+    "secret",
+    "postgres",
+    "admin",
+})
+
+
 def _random_secret(length_bytes: int = 24) -> str:
     return secrets.token_hex(length_bytes)
 
@@ -123,6 +136,29 @@ def _looks_secret_like(env_var: dict) -> bool:
     return any(word in key for word in secret_words) or any(word in description for word in secret_words)
 
 
+def _has_unresolved_placeholder(value: str) -> bool:
+    return bool(re.search(r"\{\{[A-Z0-9_]+\}\}", value) or _SHELL_ENV_REFERENCE.search(value))
+
+
+def _is_unresolved_or_weak_secret(value: str, env_var: dict | None = None) -> bool:
+    text = (value or "").strip()
+    if _has_unresolved_placeholder(text):
+        return True
+    if env_var is not None and not _looks_secret_like(env_var):
+        return not text
+    return text.lower() in _WEAK_SECRET_DEFAULTS
+
+
+def _assign_generated_or_default(overrides: dict[str, str], key: str, fallback: str | None) -> None:
+    if not key or overrides.get(key):
+        return
+    if _looks_secret_like({"key": key}):
+        overrides[key] = _random_secret()
+        return
+    if fallback:
+        overrides[key] = fallback
+
+
 def _build_template_env_overrides(
     template: dict,
     *,
@@ -144,10 +180,24 @@ def _build_template_env_overrides(
             # The backend resolves these against the selected project/database.
             continue
         resolved = _resolve_template_value(str(env_var.get("value") or ""), app_name=app_name, route_slug=route_slug)
+        references = list(_SHELL_ENV_REFERENCE.finditer(resolved))
+        if references:
+            referenced_keys = {match.group(1) for match in references}
+            for match in references:
+                _assign_generated_or_default(overrides, match.group(1), match.group(2))
+            # Drop alias keys such as POSTGRES_PASSWORD=${PG_DATABASE_PASSWORD:-...}
+            # so the referenced deploy-time input is what gets generated.
+            if key not in referenced_keys:
+                continue
+        if overrides.get(key):
+            continue
+        if _looks_secret_like(env_var) and _is_unresolved_or_weak_secret(resolved, env_var):
+            overrides[key] = _random_secret()
+            continue
         if re.search(r"\{\{RANDOM_[A-Z0-9_]+\}\}", resolved):
             overrides[key] = _random_secret()
             continue
-        if re.search(r"\{\{[A-Z0-9_]+\}\}", resolved):
+        if re.search(r"\{\{[A-Z0-9_]+\}\}", resolved) or _SHELL_ENV_REFERENCE.search(resolved):
             if _looks_secret_like(env_var):
                 overrides[key] = _random_secret()
             elif env_var.get("required"):
