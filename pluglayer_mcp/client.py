@@ -100,7 +100,9 @@ class PlugLayerClient:
                     method,
                     f"{self.base_url}{path}",
                     headers=self.headers,
-                    params=params,
+                    # httpx serializes None as an empty value, which breaks
+                    # FastAPI's optional bool/number filters. Keep False and 0.
+                    params={key: value for key, value in params.items() if value is not None} if params is not None else None,
                     json=data,
                 )
             except (httpx.TimeoutException, httpx.RequestError) as exc:

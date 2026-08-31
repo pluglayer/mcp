@@ -66,7 +66,13 @@ async def run(admin: bool) -> int:
                  ('list_marketplace_templates', {'payload': {'limit': 1}}), ('get_template_authoring_schema', {'payload': {}})]
                 if admin else
                 [('get_current_user', {}), ('get_template_authoring_schema', {}),
-                 ('list_my_templates', {}), ('list_template_categories', {})]
+                 ('list_my_templates', {}), ('list_template_categories', {}),
+                 ('list_my_feedback', {}),
+                 ('list_marketplace_templates', {}),
+                 ('list_marketplace_templates', {'featured_only': False, 'search': 'redis'}),
+                 ('list_marketplace_templates', {'featured_only': True}),
+                 ('list_pluglayer_compute_options', {}),
+                 ('list_pluglayer_compute_options', {'min_cpu_cores': 1, 'min_ram_gb': 1})]
             )
             for name, payload in calls:
                 result = await session.call_tool(name, payload)
