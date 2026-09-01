@@ -27,6 +27,7 @@ def test_public_plugins_declare_mcp_components_in_target_native_shape():
     claude_mcp = _json(claude_root / ".mcp.json")
     assert "mcpServers" not in claude_mcp
     assert "pluglayer" in claude_mcp
+    assert "uvx pluglayer-mcp@latest" in claude_mcp["pluglayer"]["args"][-1]
 
     cursor_root = plugins / "pluglayer-cursor-plugin"
     cursor_manifest = _json(cursor_root / ".cursor-plugin" / "plugin.json")
@@ -43,6 +44,49 @@ def test_public_plugins_declare_mcp_components_in_target_native_shape():
     antigravity_root = plugins / "pluglayer-antigravity-plugin"
     antigravity_mcp = _json(antigravity_root / "mcp_config.json")
     assert "pluglayer" in antigravity_mcp["mcpServers"]
+    assert "uvx pluglayer-mcp@latest" in antigravity_mcp["mcpServers"]["pluglayer"]["args"][-1]
+
+
+def test_public_plugin_icons_follow_target_manifest_schemas():
+    repo_root = Path(__file__).resolve().parents[2]
+    plugins = repo_root / "plugins"
+    icon_url = "https://pluglayer.com/pluglayer-icon.png"
+
+    codex_root = plugins / "pluglayer-codex-plugin"
+    codex = _json(codex_root / ".codex-plugin" / "plugin.json")
+    assert codex["interface"]["composerIcon"] == "./assets/pluglayer-icon.png"
+    assert codex["interface"]["logo"] == "./assets/pluglayer-icon.png"
+    assert (codex_root / "assets" / "pluglayer-icon.png").is_file()
+
+    cursor = _json(plugins / "pluglayer-cursor-plugin" / ".cursor-plugin" / "plugin.json")
+    assert cursor["logo"] == icon_url
+
+    claude = _json(plugins / "pluglayer-claude-plugin" / ".claude-plugin" / "plugin.json")
+    assert "logo" not in claude and "icon" not in claude
+
+    antigravity = _json(plugins / "pluglayer-antigravity-plugin" / "plugin.json")
+    assert set(antigravity) == {"name", "description"}
+
+    server = (repo_root / "pluglayer-mcp" / "pluglayer_mcp" / "server.py").read_text()
+    assert f'Icon(src="{icon_url}")' in server
+
+
+def test_every_public_plugin_bundles_consent_gated_update_guidance():
+    repo_root = Path(__file__).resolve().parents[2]
+    for target in ("codex", "claude", "cursor", "antigravity"):
+        skill = (
+            repo_root
+            / "plugins"
+            / f"pluglayer-{target}-plugin"
+            / "skills"
+            / "manage-plugin-updates"
+            / "SKILL.md"
+        )
+        text = skill.read_text(encoding="utf-8")
+        assert "check_plugin_updates" in text
+        assert "24-hour cache" in text
+        assert "Never update automatically" in text
+        assert "user_approved=true" in text
 
 
 def test_cursor_plugin_starts_without_auth_for_live_tool_discovery(tmp_path):
