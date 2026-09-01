@@ -162,7 +162,7 @@ Marketplace template deployment through MCP now supports both:
 | `list_registries` | List the registries currently available to the user |
 | `deploy_image` | Mirror a Docker image into PlugLayer's managed Docker Hub namespace, then deploy it after backend compute checks; if a similar app already exists and the namespace is full, use update/replace flow instead of a brand-new app |
 | `upload_image_archive_and_deploy` | Upload a locally built Docker or OCI tar archive from the user's machine; if the target app already exists, switch to the app upload-first redeploy flow, otherwise create and deploy a new app |
-| `upload_image_archive_and_redeploy_app` | Upload a newly rebuilt Docker or OCI tar archive for an existing app, push it with a new tag, keep the slug unchanged, and queue that app's redeploy |
+| `upload_image_archive_and_redeploy_app` | Upload a newly rebuilt Docker or OCI tar archive for an existing app, using retry-safe chunks for archives over 16 MiB; push it with a new tag, keep the slug unchanged, and queue that app's redeploy |
 | `deploy_compose` | Analyze docker-compose.yml, split it into separate deploy units, route known databases through Data Layer templates, deploy remaining services as separate apps, and require uploaded archives for local-build services |
 | `analyze_compose_deploy_plan` | Preview how PlugLayer will split a docker-compose stack into Data Layer databases, separate compose apps, and local-build image services |
 | `get_compose_local_build_commands` | Generate exact `docker buildx`, smoke-test, and OCI export commands for local-build compose services before they are uploaded and deployed |
