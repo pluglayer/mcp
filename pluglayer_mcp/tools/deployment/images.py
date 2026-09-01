@@ -1,5 +1,7 @@
 """Deployment MCP tool registrations."""
 
+import asyncio
+import hashlib
 import json
 import os
 
@@ -30,6 +32,87 @@ from pluglayer_mcp.tools.shared import (
     _remember_context,
     _status_emoji,
 )
+
+_CHUNKED_UPLOAD_THRESHOLD_BYTES = 16 * 1024 * 1024
+_MAX_SERVER_CHUNK_BYTES = 32 * 1024 * 1024
+
+
+def _transient_chunk_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(token in message for token in ("timed out", "connection", "closed", "network error"))
+
+
+async def _upload_existing_app_archive(
+    client,
+    *,
+    app_id: str,
+    image_archive_path: str,
+    tag: str,
+    registry_id: str,
+    redeploy_strategy: str,
+    wait_seconds: int,
+) -> dict:
+    size_bytes = os.path.getsize(image_archive_path)
+    if size_bytes <= _CHUNKED_UPLOAD_THRESHOLD_BYTES:
+        return await client.post_multipart(
+            f"/v1/plugin/apps/{app_id}/upload-image-redeploy",
+            form_data={
+                "tag": tag,
+                "registry_id": registry_id or "",
+                "redeploy_strategy": redeploy_strategy,
+                "wait_seconds": str(wait_seconds),
+            },
+            file_field="archive",
+            file_path=image_archive_path,
+            content_type="application/x-tar",
+        )
+
+    session = await client.post(
+        f"/v1/plugin/apps/{app_id}/image-upload-sessions",
+        {"filename": os.path.basename(image_archive_path), "size_bytes": size_bytes},
+    )
+    upload_id = session.get("upload_id")
+    chunk_size = int(session.get("chunk_size") or 0)
+    if not upload_id or chunk_size <= 0 or chunk_size > _MAX_SERVER_CHUNK_BYTES:
+        raise RuntimeError("PlugLayer returned an invalid large-upload session")
+
+    offset = 0
+    index = 0
+    with open(image_archive_path, "rb") as archive:
+        while chunk := archive.read(chunk_size):
+            digest = hashlib.sha256(chunk).hexdigest()
+            path = f"/v1/plugin/apps/{app_id}/image-upload-sessions/{upload_id}/chunks/{index}"
+            for attempt in range(3):
+                try:
+                    result = await client.put_bytes(
+                        path,
+                        chunk,
+                        headers={
+                            "X-Upload-Offset": str(offset),
+                            "X-Chunk-SHA256": digest,
+                        },
+                    )
+                    break
+                except Exception as exc:
+                    if attempt == 2 or not _transient_chunk_error(exc):
+                        raise
+                    await asyncio.sleep(0.5 * (attempt + 1))
+            offset = int(result.get("received_bytes") or (offset + len(chunk)))
+            index += 1
+
+    if offset != size_bytes:
+        raise RuntimeError(f"PlugLayer accepted {offset} of {size_bytes} archive bytes")
+    return await client.post(
+        f"/v1/plugin/apps/{app_id}/image-upload-sessions/{upload_id}/complete-redeploy",
+        {
+            "tag": tag,
+            "registry_id": registry_id or None,
+            "redeploy_strategy": redeploy_strategy,
+            "wait_seconds": wait_seconds,
+        },
+        timeout=1800.0,
+    )
+
 
 def register_images_tools(mcp):
     @mcp.tool()
@@ -185,17 +268,14 @@ def register_images_tools(mcp):
             project_apps = (await _client().get(f"/v1/plugin/projects/{project_id}/apps")).get("apps", [])
             existing_app = _find_existing_project_app_match(project_apps, name=name, route_slug=route_slug)
             if existing_app and existing_app.get("id"):
-                data = await _client().post_multipart(
-                    f"/v1/plugin/apps/{existing_app.get('id')}/upload-image-redeploy",
-                    form_data={
-                        "tag": tag,
-                        "registry_id": registry_id or "",
-                        "redeploy_strategy": redeploy_strategy,
-                        "wait_seconds": "0",
-                    },
-                    file_field="archive",
-                    file_path=image_archive_path,
-                    content_type="application/x-tar",
+                data = await _upload_existing_app_archive(
+                    _client(),
+                    app_id=existing_app.get("id"),
+                    image_archive_path=image_archive_path,
+                    tag=tag,
+                    registry_id=registry_id,
+                    redeploy_strategy=redeploy_strategy,
+                    wait_seconds=0,
                 )
                 task_id = data.get("task_id")
                 mirrored = data.get("mirrored_image")
@@ -298,17 +378,14 @@ def register_images_tools(mcp):
                 return f"Image archive not found: {image_archive_path}"
             app_data = await _client().get(f"/v1/plugin/apps/{app_id}")
             app = app_data.get("app", {})
-            data = await _client().post_multipart(
-                f"/v1/plugin/apps/{app_id}/upload-image-redeploy",
-                form_data={
-                    "tag": tag,
-                    "registry_id": registry_id or "",
-                    "redeploy_strategy": redeploy_strategy,
-                    "wait_seconds": str(wait_seconds),
-                },
-                file_field="archive",
-                file_path=image_archive_path,
-                content_type="application/x-tar",
+            data = await _upload_existing_app_archive(
+                _client(),
+                app_id=app_id,
+                image_archive_path=image_archive_path,
+                tag=tag,
+                registry_id=registry_id,
+                redeploy_strategy=redeploy_strategy,
+                wait_seconds=wait_seconds,
             )
             task_id = data.get("task_id")
             mirrored = data.get("mirrored_image")

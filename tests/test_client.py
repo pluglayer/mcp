@@ -147,3 +147,40 @@ def test_multipart_uses_long_streaming_timeouts(monkeypatch, tmp_path):
     assert captured["timeout"].pool == 30.0
     assert captured["timeout"].read == 1800.0
     assert captured["timeout"].write == 1800.0
+
+
+def test_put_bytes_sends_chunk_headers_and_unwraps_envelope(monkeypatch):
+    captured = {}
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout):
+            captured["timeout"] = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def put(self, url, *, headers, content):
+            captured.update({"url": url, "headers": headers, "content": content})
+            return httpx.Response(
+                200,
+                json={"ok": True, "data": {"received_bytes": len(content)}},
+                request=httpx.Request("PUT", url),
+            )
+
+    monkeypatch.setattr("pluglayer_mcp.client.httpx.AsyncClient", FakeAsyncClient)
+    client = PlugLayerClient(api_key="test-key", base_url="https://api.example.test")
+    result = asyncio.run(
+        client.put_bytes(
+            "/v1/plugin/apps/app-1/image-upload-sessions/upload-1/chunks/0",
+            b"chunk",
+            headers={"X-Upload-Offset": "0", "X-Chunk-SHA256": "a" * 64},
+        )
+    )
+
+    assert result == {"received_bytes": 5}
+    assert captured["content"] == b"chunk"
+    assert captured["headers"]["Content-Type"] == "application/octet-stream"
+    assert captured["headers"]["X-Upload-Offset"] == "0"

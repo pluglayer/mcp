@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 
-from pluglayer_mcp.tools.deployment import app_read
+from pluglayer_mcp.tools.deployment import app_read, images as image_tools
 from pluglayer_mcp.tools.deployment.app_operations import register_app_operations_tools
 from pluglayer_mcp.tools.deployment.app_read import register_app_read_tools
 from pluglayer_mcp.tools.deployment.images import register_images_tools
@@ -78,6 +78,42 @@ def test_uploaded_image_redeploy_queues_without_synchronous_wait_by_default():
     signature = inspect.signature(mcp.tools["upload_image_archive_and_redeploy_app"])
 
     assert signature.parameters["wait_seconds"].default == 0
+
+
+def test_large_existing_app_archive_uses_retry_safe_chunk_session(monkeypatch, tmp_path):
+    archive = tmp_path / "image.oci.tar"
+    archive.write_bytes(b"abcdefghij")
+    calls = {"chunks": []}
+
+    class FakeClient:
+        async def post(self, path, data=None, params=None, timeout=60.0):
+            calls.setdefault("posts", []).append((path, data, timeout))
+            if path.endswith("/image-upload-sessions"):
+                return {"upload_id": "upload-1", "chunk_size": 4}
+            return {"task_id": "task-1", "received": True}
+
+        async def put_bytes(self, path, content, *, headers, timeout=300.0):
+            calls["chunks"].append((path, content, headers))
+            return {"received_bytes": int(headers["X-Upload-Offset"]) + len(content)}
+
+    monkeypatch.setattr(image_tools, "_CHUNKED_UPLOAD_THRESHOLD_BYTES", 4)
+    result = asyncio.run(
+        image_tools._upload_existing_app_archive(
+            FakeClient(),
+            app_id="app-1",
+            image_archive_path=str(archive),
+            tag="release-1",
+            registry_id="",
+            redeploy_strategy="recreate",
+            wait_seconds=0,
+        )
+    )
+
+    assert result["task_id"] == "task-1"
+    assert [content for _, content, _ in calls["chunks"]] == [b"abcd", b"efgh", b"ij"]
+    assert [headers["X-Upload-Offset"] for _, _, headers in calls["chunks"]] == ["0", "4", "8"]
+    assert calls["posts"][-1][0].endswith("/upload-1/complete-redeploy")
+    assert calls["posts"][-1][2] == 1800.0
 
 
 def test_get_app_logs_preserves_get_logs_alias(monkeypatch):
