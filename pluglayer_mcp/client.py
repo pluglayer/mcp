@@ -5,7 +5,7 @@ import httpx
 
 from pluglayer_mcp.credentials import resolve_api_base_url, resolve_api_key
 
-_USER_AGENT = "pluglayer-mcp/0.1.10"
+_USER_AGENT = "pluglayer-mcp/0.1.11"
 
 
 def _stringify_detail(detail: Any) -> str:
@@ -163,6 +163,41 @@ class PlugLayerClient:
 
     async def put(self, path: str, data: dict) -> Any:
         return await self._request("PUT", path, data=data, timeout=30.0)
+
+    async def put_bytes(
+        self,
+        path: str,
+        content: bytes,
+        *,
+        headers: dict[str, str] | None = None,
+        timeout: float = 300.0,
+    ) -> Any:
+        request_headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/octet-stream",
+            "User-Agent": _USER_AGENT,
+            **(headers or {}),
+        }
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            try:
+                resp = await client.put(
+                    f"{self.base_url}{path}",
+                    headers=request_headers,
+                    content=content,
+                )
+            except (httpx.TimeoutException, httpx.RequestError) as exc:
+                raise RuntimeError(_format_request_error(exc)) from exc
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                detail = _extract_error_detail(resp)
+                raise RuntimeError(f"{resp.status_code} {resp.reason_phrase}: {detail}") from exc
+            if resp.status_code == 204 or not resp.content:
+                return {}
+            payload = resp.json()
+            if isinstance(payload, dict) and payload.get("ok") is True and "data" in payload:
+                return payload["data"]
+            return payload
 
     async def post_multipart(
         self,
