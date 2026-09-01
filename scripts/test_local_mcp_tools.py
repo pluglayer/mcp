@@ -63,6 +63,8 @@ EXPECTED_TEXT = {
 }
 
 EXPECTED_TOOL_NAMES = {
+    "check_plugin_updates",
+    "update_plugin",
     "get_template_authoring_schema",
     "preview_template_compose",
     "apply_app_env_vars",
