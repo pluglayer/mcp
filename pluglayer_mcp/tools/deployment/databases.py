@@ -82,7 +82,7 @@ def register_databases_tools(mcp):
         cpu_limit: str = "",
         memory_limit: str = "",
         storage_gb: int = 0,
-        compute_placement: str = "auto",
+        compute_placement: str = "personal",
         env_overrides: dict[str, str] | None = None,
         tcp_allowed_cidrs: list[str] | None = None,
     ) -> str:
