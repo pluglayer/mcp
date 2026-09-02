@@ -8,7 +8,7 @@ from typing import Literal
 from pluglayer_mcp.tools.shared import _client, _compact_error
 
 
-FeedbackCategory = Literal["bug", "idea", "question", "other"]
+FeedbackCategory = Literal["bug", "idea", "question", "compute_request", "other"]
 
 _SECRET_PATTERNS = (
     re.compile(r"(?i)\b(authorization\s*:\s*bearer|bearer)\s+[^\s,;]+"),

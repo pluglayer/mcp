@@ -38,6 +38,16 @@ READ_ONLY_TOOLS: tuple[tuple[str, dict[str, Any]], ...] = (
             "expected_requests_per_minute": 40,
         },
     ),
+    (
+        "plan_dedicated_compute",
+        {
+            "workload_name": "MCP dedicated-planner smoke",
+            "cpu_cores": 0.5,
+            "ram_gb": 0.5,
+            "storage_gb": 1,
+            "gpu_gb": 0,
+        },
+    ),
     ("list_nodes", {}),
     ("list_registries", {}),
     ("list_deployments", {}),
@@ -76,6 +86,7 @@ EXPECTED_TOOL_NAMES = {
     "submit_feedback",
     "get_feedback",
     "update_my_feedback",
+    "request_extra_compute",
 }
 
 

@@ -78,7 +78,6 @@ def register_compose_tools(mcp):
             for item in plan.get("services") or []:
                 strategy = item.get("strategy")
                 if strategy == "database_template":
-                    routed_compute_placement = "auto" if compute_placement == "personal" else compute_placement
                     resolved_overrides = _compose_db_env_overrides(item)
                     preview = await _preview_database_runtime(
                         template_id=item.get("marketplace_template_id") or item.get("marketplace_template_slug"),
@@ -98,7 +97,7 @@ def register_compose_tools(mcp):
                             "project_id": project_id,
                             "app_name": item.get("suggested_app_name"),
                             "route_slug": item.get("suggested_route_slug"),
-                            "compute_placement": routed_compute_placement,
+                            "compute_placement": compute_placement,
                             "env_overrides": resolved_overrides,
                         },
                     )

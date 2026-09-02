@@ -105,7 +105,7 @@ def register_marketplace_tools(mcp):
         project_id: str = "",
         project_name: str = "",
         route_slug: str = "",
-        compute_placement: str = "auto",
+        compute_placement: str = "personal",
         cpu_limit: str = "",
         memory_limit: str = "",
         storage_gb: int = 0,
