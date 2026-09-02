@@ -85,6 +85,32 @@ def _fmt_catalog_node(node: dict) -> str:
     )
 
 
+def _fmt_dedicated_plan(plan: dict) -> str:
+    lines = [
+        "🧭 **Dedicated Compute Plan**",
+        f"Status: {str(plan.get('status', 'unknown')).replace('_', ' ')}",
+        f"Can deploy now: {'yes' if plan.get('can_deploy_now') else 'no'}",
+        str(plan.get("message") or ""),
+    ]
+    for item in plan.get("assignments") or []:
+        required = item.get("required") or {}
+        lines.append(
+            f"- {item.get('workload_name')} → {item.get('node_name')} ({item.get('action')}) | "
+            f"{_compute_value(required, 'cpu_cores')} CPU, {_compute_value(required, 'ram_gb')}GB RAM, "
+            f"{_compute_value(required, 'storage_gb')}GB storage, {_compute_value(required, 'gpu_gb')}GB GPU"
+        )
+    for item in plan.get("shortages") or []:
+        required = item.get("required") or {}
+        lines.append(
+            f"- Unavailable: {item.get('workload_name')} needs {_compute_value(required, 'cpu_cores')} CPU, "
+            f"{_compute_value(required, 'ram_gb')}GB RAM, {_compute_value(required, 'storage_gb')}GB storage, "
+            f"and {_compute_value(required, 'gpu_gb')}GB GPU on one machine."
+        )
+    if plan.get("marketplace_nodes"):
+        lines.append(f"Recommended marketplace total: ${float(plan.get('marketplace_monthly_total') or 0):.2f}/month")
+    return "\n".join(line for line in lines if line)
+
+
 def register_compute_tools(mcp):
     # ── Compute / nodes ───────────────────────────────────────────────────────────
 
@@ -143,8 +169,9 @@ def register_compute_tools(mcp):
         components: list[str] | None = None,
         expected_monthly_active_users: int | None = None,
         expected_requests_per_minute: int | None = None,
+        project_id: str = "",
     ) -> str:
-        """Estimate the compute needed for a described workload and return a tailored PlugLayer offer link. This is the preferred first step before telling the user to purchase, reserve, or add more compute, and the agent should present the returned link as the user's next confirmation step."""
+        """Estimate workload resources, then use the backend-owned dedicated-machine plan. One app must fit wholly on one node; never add undersized machines together. Pass project_id so existing project capacity is reused before any purchase."""
         try:
             if not (use_case or "").strip():
                 if components:
@@ -156,6 +183,7 @@ def register_compute_tools(mcp):
                     )
             data = await _client().post("/v1/plugin/compute/estimate", {
                 "use_case": use_case,
+                "project_id": project_id or None,
                 "components": components or [],
                 "expected_monthly_active_users": expected_monthly_active_users,
                 "expected_requests_per_minute": expected_requests_per_minute,
@@ -182,17 +210,93 @@ def register_compute_tools(mcp):
                 f"Storage: {estimation.get('storage')} GB\n"
                 f"Estimated monthly price: ${data.get('estimated_price_per_month')}\n"
             ]
-            if suggested:
-                lines.append("\nSuggested PlugLayer node bundle right now:")
+            plan = data.get("dedicated_plan") or {}
+            if plan:
+                lines.append("\n" + _fmt_dedicated_plan(plan))
+            if suggested and plan.get("marketplace_nodes"):
+                lines.append("\nAdequate dedicated machine options right now:")
                 lines.extend(_fmt_catalog_node(node) for node in suggested)
-                lines.append("\nUse the offer page to confirm availability and pay for all selected nodes together:")
-            else:
-                lines.append("\nNo current PlugLayer marketplace option fully meets that floor yet. Use the tailored compute offer page to request the right shape:")
-            lines.append(f"Get or confirm your compute here: {data.get('quota_link')}\n")
+                lines.append("\nUse the offer page to recheck availability and confirm the reservation:")
+                lines.append(f"Get or confirm your compute here: {data.get('quota_link')}\n")
+            elif plan.get("extra_compute_request_available"):
+                lines.append("\nNo active marketplace machine can host this app on one node. Ask the user whether to submit an Extra Compute Request, then call request_extra_compute(..., confirm=true).")
             lines.append(data.get("message"))
             return "\n".join(lines)
         except Exception as e:
             return _compact_error("Error estimating compute", e)
+
+
+    @mcp.tool()
+    async def plan_dedicated_compute(
+        workload_name: str,
+        cpu_cores: float,
+        ram_gb: float,
+        storage_gb: float = 1,
+        gpu_gb: float = 0,
+        project_id: str = "",
+        exclude_app_id: str = "",
+    ) -> str:
+        """Plan one app against project and account dedicated capacity, then active ready-to-buy marketplace machines. Existing capacity is used first. Every CPU/RAM/storage/GPU requirement must fit on one node. For a resize, pass project_id and exclude_app_id so the app's current reservation is replaced instead of counted twice."""
+        if cpu_cores <= 0 or ram_gb <= 0 or storage_gb < 0 or gpu_gb < 0:
+            return "CPU and RAM must be greater than zero; storage and GPU cannot be negative."
+        try:
+            data = await _client().post("/v1/plugin/compute/plan", {
+                "project_id": project_id or None,
+                "exclude_app_id": exclude_app_id or None,
+                "workloads": [{
+                    "id": "requested-workload",
+                    "name": workload_name,
+                    "cpu_cores": cpu_cores,
+                    "ram_gb": ram_gb,
+                    "storage_gb": storage_gb,
+                    "gpu_gb": gpu_gb,
+                }],
+            })
+            return _fmt_dedicated_plan(data)
+        except Exception as e:
+            return _compact_error("Error planning dedicated compute", e)
+
+
+    @mcp.tool()
+    async def request_extra_compute(
+        workload_name: str,
+        cpu_cores: float,
+        ram_gb: float,
+        storage_gb: float = 1,
+        gpu_gb: float = 0,
+        project_id: str = "",
+        context: str = "",
+        confirm: bool = False,
+        exclude_app_id: str = "",
+    ) -> str:
+        """Submit an Extra Compute Request as authenticated user feedback when no active marketplace machine fits the app. First call plan_dedicated_compute. Set confirm=true only after the user explicitly asks to submit the request."""
+        if not confirm:
+            return "Confirmation required. Show the unmet one-node requirements, ask the user, then call request_extra_compute(..., confirm=true)."
+        try:
+            data = await _client().post("/v1/plugin/compute/requests", {
+                "project_id": project_id or None,
+                "exclude_app_id": exclude_app_id or None,
+                "workloads": [{
+                    "id": "requested-workload",
+                    "name": workload_name,
+                    "cpu_cores": cpu_cores,
+                    "ram_gb": ram_gb,
+                    "storage_gb": storage_gb,
+                    "gpu_gb": gpu_gb,
+                }],
+                "context": context,
+                "source": "plugin",
+                "confirmed": True,
+            })
+            feedback = data.get("feedback") or {}
+            return (
+                "✅ Extra Compute Request submitted.\n"
+                f"Ticket: `{feedback.get('id', 'unknown')}`\n"
+                f"Status: {feedback.get('status', 'open')}\n"
+                "PlugLayer will track it through the normal feedback workflow."
+            )
+        except Exception as e:
+            return _compact_error("Error requesting extra compute", e)
 
 
     @mcp.tool()

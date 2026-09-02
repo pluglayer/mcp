@@ -145,7 +145,6 @@ def register_images_tools(mcp):
                         route_slug=route_slug_value,
                         provided_overrides=env_vars,
                     )
-                    routed_compute_placement = "auto" if compute_placement == "personal" else compute_placement
                     data = await _client().post(
                         "/v1/plugin/databases",
                         {
@@ -153,7 +152,7 @@ def register_images_tools(mcp):
                             "project_id": project_id,
                             "app_name": name,
                             "route_slug": route_slug_value,
-                            "compute_placement": routed_compute_placement,
+                            "compute_placement": compute_placement,
                             "env_overrides": resolved_overrides,
                             "cpu_limit": cpu_limit,
                             "memory_limit": memory_limit,
