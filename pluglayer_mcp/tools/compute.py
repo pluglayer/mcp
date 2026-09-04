@@ -301,15 +301,14 @@ def register_compute_tools(mcp):
 
     @mcp.tool()
     async def get_shared_compute_pricing() -> str:
-        """Show the admin-defined unit pricing for shared compute reservations plus the currently unreserved shared pool. Read-only: direct the user to the PlugLayer web app (Compute -> Add Compute -> Buy shared compute) to actually purchase a reservation."""
+        """Legacy read-only visibility into shared-compute pricing and pool capacity. New shared reservations are paused; use plan_dedicated_compute for current app and template selection."""
         try:
             data = await _client().get("/v1/plugin/compute/shared/pricing")
             pricing = data.get("pricing") or {}
             pool = data.get("pool_available") or {}
             if not pricing.get("enabled"):
                 return (
-                    "Shared compute purchasing is not enabled yet. An admin must configure shared pricing "
-                    "in Admin -> Compute -> Shared Compute Pricing first."
+                    "Shared compute purchasing is not available yet. Use plan_dedicated_compute for a fitting dedicated machine."
                 )
             currency = pricing.get("currency", "USD")
             return "\n".join(
@@ -320,7 +319,7 @@ def register_compute_tools(mcp):
                     f"Per 10GB storage: {currency} {pricing.get('price_per_storage_10gb', 0)}",
                     f"Per GB GPU: {currency} {pricing.get('price_per_gpu_gb', 0)}",
                     f"Unreserved shared pool right now: {_fmt_compute(pool)}",
-                    "Purchase in the PlugLayer app: Compute -> Add Compute -> Buy shared compute.",
+                    "New shared reservations are paused. Use plan_dedicated_compute for current deployment choices.",
                 ]
             )
         except Exception as e:
