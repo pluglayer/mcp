@@ -116,6 +116,76 @@ def test_large_existing_app_archive_uses_retry_safe_chunk_session(monkeypatch, t
     assert calls["posts"][-1][2] == 1800.0
 
 
+def test_large_new_app_archive_uses_retry_safe_chunk_session(monkeypatch, tmp_path):
+    archive = tmp_path / "image.oci.tar"
+    archive.write_bytes(b"abcdefghij")
+    calls = {"chunks": []}
+
+    class FakeClient:
+        async def get(self, path, params=None):
+            assert path == "/v1/plugin/projects/project-1/apps"
+            return {"apps": []}
+
+        async def post(self, path, data=None, params=None, timeout=60.0):
+            calls.setdefault("posts", []).append((path, data, timeout))
+            if path.endswith("/image-upload-sessions"):
+                return {"upload_id": "upload-1", "chunk_size": 4}
+            return {
+                "task_id": "task-new",
+                "app": {"id": "app-new", "name": "new-app", "route_slug": "new-app"},
+                "mirrored_image": "registry.example/new-app:release-1",
+            }
+
+        async def put_bytes(self, path, content, *, headers, timeout=300.0):
+            calls["chunks"].append((path, content, headers))
+            return {"received_bytes": int(headers["X-Upload-Offset"]) + len(content)}
+
+    async def ready_compute(*, project_id):
+        return {"can_deploy": True}
+
+    async def remember_context(update):
+        calls["context"] = update
+
+    class FakeMCP:
+        def __init__(self):
+            self.tools = {}
+
+        def tool(self):
+            def register(function):
+                self.tools[function.__name__] = function
+                return function
+
+            return register
+
+    client = FakeClient()
+    mcp = FakeMCP()
+    monkeypatch.setattr(image_tools, "_CHUNKED_UPLOAD_THRESHOLD_BYTES", 4)
+    monkeypatch.setattr(image_tools, "_client", lambda: client)
+    monkeypatch.setattr(image_tools, "_get_compute_summary", ready_compute)
+    monkeypatch.setattr(image_tools, "_remember_context", remember_context)
+    register_images_tools(mcp)
+
+    output = asyncio.run(
+        mcp.tools["upload_image_archive_and_deploy"](
+            project_id="project-1",
+            name="new-app",
+            image_archive_path=str(archive),
+            tag="release-1",
+            ports=[8080],
+            route_slug="new-app",
+        )
+    )
+
+    assert "task-new" in output
+    assert [content for _, content, _ in calls["chunks"]] == [b"abcd", b"efgh", b"ij"]
+    assert calls["posts"][0][0] == "/v1/plugin/projects/project-1/apps/image-upload-sessions"
+    complete_path, complete_payload, complete_timeout = calls["posts"][-1]
+    assert complete_path.endswith("/upload-1/complete-deploy")
+    assert complete_payload["deploy_request"]["source"]["tag"] == "release-1"
+    assert complete_payload["deploy_request"]["source"]["ports"] == [8080]
+    assert complete_timeout == 1800.0
+
+
 def test_get_app_logs_preserves_get_logs_alias(monkeypatch):
     class FakeMCP:
         def __init__(self):
