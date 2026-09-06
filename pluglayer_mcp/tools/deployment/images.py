@@ -67,8 +67,31 @@ async def _upload_existing_app_archive(
             content_type="application/x-tar",
         )
 
+    return await _upload_chunked_archive(
+        client,
+        image_archive_path=image_archive_path,
+        session_path=f"/v1/plugin/apps/{app_id}/image-upload-sessions",
+        complete_action="complete-redeploy",
+        complete_payload={
+            "tag": tag,
+            "registry_id": registry_id or None,
+            "redeploy_strategy": redeploy_strategy,
+            "wait_seconds": wait_seconds,
+        },
+    )
+
+
+async def _upload_chunked_archive(
+    client,
+    *,
+    image_archive_path: str,
+    session_path: str,
+    complete_action: str,
+    complete_payload: dict,
+) -> dict:
+    size_bytes = os.path.getsize(image_archive_path)
     session = await client.post(
-        f"/v1/plugin/apps/{app_id}/image-upload-sessions",
+        session_path,
         {"filename": os.path.basename(image_archive_path), "size_bytes": size_bytes},
     )
     upload_id = session.get("upload_id")
@@ -81,7 +104,7 @@ async def _upload_existing_app_archive(
     with open(image_archive_path, "rb") as archive:
         while chunk := archive.read(chunk_size):
             digest = hashlib.sha256(chunk).hexdigest()
-            path = f"/v1/plugin/apps/{app_id}/image-upload-sessions/{upload_id}/chunks/{index}"
+            path = f"{session_path}/{upload_id}/chunks/{index}"
             for attempt in range(3):
                 try:
                     result = await client.put_bytes(
@@ -103,13 +126,8 @@ async def _upload_existing_app_archive(
     if offset != size_bytes:
         raise RuntimeError(f"PlugLayer accepted {offset} of {size_bytes} archive bytes")
     return await client.post(
-        f"/v1/plugin/apps/{app_id}/image-upload-sessions/{upload_id}/complete-redeploy",
-        {
-            "tag": tag,
-            "registry_id": registry_id or None,
-            "redeploy_strategy": redeploy_strategy,
-            "wait_seconds": wait_seconds,
-        },
+        f"{session_path}/{upload_id}/{complete_action}",
+        complete_payload,
         timeout=1800.0,
     )
 
@@ -327,13 +345,42 @@ def register_images_tools(mcp):
                 "cpu_limit": cpu_limit,
                 "memory_limit": memory_limit,
             }
-            data = await _client().post_multipart(
-                f"/v1/plugin/projects/{project_id}/apps/upload-image",
-                form_data=form_data,
-                file_field="archive",
-                file_path=image_archive_path,
-                content_type="application/x-tar",
-            )
+            if os.path.getsize(image_archive_path) <= _CHUNKED_UPLOAD_THRESHOLD_BYTES:
+                data = await _client().post_multipart(
+                    f"/v1/plugin/projects/{project_id}/apps/upload-image",
+                    form_data=form_data,
+                    file_field="archive",
+                    file_path=image_archive_path,
+                    content_type="application/x-tar",
+                )
+            else:
+                data = await _upload_chunked_archive(
+                    _client(),
+                    image_archive_path=image_archive_path,
+                    session_path=f"/v1/plugin/projects/{project_id}/apps/image-upload-sessions",
+                    complete_action="complete-deploy",
+                    complete_payload={
+                        "deploy_request": {
+                            "name": name,
+                            "route_slug": route_slug or None,
+                            "compute_placement": compute_placement,
+                            "redeploy_strategy": redeploy_strategy,
+                            "registry_id": registry_id or None,
+                            "source": {
+                                "type": "image",
+                                "image": "uploaded-archive",
+                                "tag": tag,
+                                "ports": ports or [],
+                                "env_vars": env_vars or {},
+                                "command_args": command_args or [],
+                                "replicas": replicas,
+                                "cpu_limit": cpu_limit,
+                                "memory_limit": memory_limit,
+                            },
+                        },
+                        "wait_seconds": 0,
+                    },
+                )
             task_id = data.get("task_id")
             app = data.get("app", {})
             mirrored = data.get("mirrored_image")
