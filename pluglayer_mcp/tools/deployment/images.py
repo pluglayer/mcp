@@ -34,12 +34,28 @@ from pluglayer_mcp.tools.shared import (
 )
 
 _CHUNKED_UPLOAD_THRESHOLD_BYTES = 16 * 1024 * 1024
+_CLIENT_CHUNK_SIZE_BYTES = 4 * 1024 * 1024
 _MAX_SERVER_CHUNK_BYTES = 32 * 1024 * 1024
 
 
 def _transient_chunk_error(exc: Exception) -> bool:
     message = str(exc).lower()
-    return any(token in message for token in ("timed out", "connection", "closed", "network error"))
+    return any(
+        token in message
+        for token in (
+            "timed out",
+            "timeout",
+            "connection",
+            "closed",
+            "network error",
+            "502 ",
+            "503 ",
+            "504 ",
+            "bad gateway",
+            "service unavailable",
+            "gateway timeout",
+        )
+    )
 
 
 async def _upload_existing_app_archive(
@@ -95,9 +111,10 @@ async def _upload_chunked_archive(
         {"filename": os.path.basename(image_archive_path), "size_bytes": size_bytes},
     )
     upload_id = session.get("upload_id")
-    chunk_size = int(session.get("chunk_size") or 0)
-    if not upload_id or chunk_size <= 0 or chunk_size > _MAX_SERVER_CHUNK_BYTES:
+    server_chunk_size = int(session.get("chunk_size") or 0)
+    if not upload_id or server_chunk_size <= 0 or server_chunk_size > _MAX_SERVER_CHUNK_BYTES:
         raise RuntimeError("PlugLayer returned an invalid large-upload session")
+    chunk_size = min(server_chunk_size, _CLIENT_CHUNK_SIZE_BYTES)
 
     offset = 0
     index = 0
