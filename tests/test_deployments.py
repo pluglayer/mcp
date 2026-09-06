@@ -89,7 +89,7 @@ def test_large_existing_app_archive_uses_retry_safe_chunk_session(monkeypatch, t
         async def post(self, path, data=None, params=None, timeout=60.0):
             calls.setdefault("posts", []).append((path, data, timeout))
             if path.endswith("/image-upload-sessions"):
-                return {"upload_id": "upload-1", "chunk_size": 4}
+                return {"upload_id": "upload-1", "chunk_size": 16}
             return {"task_id": "task-1", "received": True}
 
         async def put_bytes(self, path, content, *, headers, timeout=300.0):
@@ -97,6 +97,7 @@ def test_large_existing_app_archive_uses_retry_safe_chunk_session(monkeypatch, t
             return {"received_bytes": int(headers["X-Upload-Offset"]) + len(content)}
 
     monkeypatch.setattr(image_tools, "_CHUNKED_UPLOAD_THRESHOLD_BYTES", 4)
+    monkeypatch.setattr(image_tools, "_CLIENT_CHUNK_SIZE_BYTES", 4)
     result = asyncio.run(
         image_tools._upload_existing_app_archive(
             FakeClient(),
@@ -129,7 +130,7 @@ def test_large_new_app_archive_uses_retry_safe_chunk_session(monkeypatch, tmp_pa
         async def post(self, path, data=None, params=None, timeout=60.0):
             calls.setdefault("posts", []).append((path, data, timeout))
             if path.endswith("/image-upload-sessions"):
-                return {"upload_id": "upload-1", "chunk_size": 4}
+                return {"upload_id": "upload-1", "chunk_size": 16}
             return {
                 "task_id": "task-new",
                 "app": {"id": "app-new", "name": "new-app", "route_slug": "new-app"},
@@ -160,6 +161,7 @@ def test_large_new_app_archive_uses_retry_safe_chunk_session(monkeypatch, tmp_pa
     client = FakeClient()
     mcp = FakeMCP()
     monkeypatch.setattr(image_tools, "_CHUNKED_UPLOAD_THRESHOLD_BYTES", 4)
+    monkeypatch.setattr(image_tools, "_CLIENT_CHUNK_SIZE_BYTES", 4)
     monkeypatch.setattr(image_tools, "_client", lambda: client)
     monkeypatch.setattr(image_tools, "_get_compute_summary", ready_compute)
     monkeypatch.setattr(image_tools, "_remember_context", remember_context)
@@ -184,6 +186,42 @@ def test_large_new_app_archive_uses_retry_safe_chunk_session(monkeypatch, tmp_pa
     assert complete_payload["deploy_request"]["source"]["tag"] == "release-1"
     assert complete_payload["deploy_request"]["source"]["ports"] == [8080]
     assert complete_timeout == 1800.0
+
+
+def test_chunk_upload_retries_gateway_timeouts(monkeypatch, tmp_path):
+    archive = tmp_path / "image.oci.tar"
+    archive.write_bytes(b"abcdef")
+    calls = {"attempts": 0}
+
+    class FakeClient:
+        async def post(self, path, data=None, params=None, timeout=60.0):
+            if path.endswith("/image-upload-sessions"):
+                return {"upload_id": "upload-1", "chunk_size": 16}
+            return {"task_id": "task-1"}
+
+        async def put_bytes(self, path, content, *, headers, timeout=300.0):
+            calls["attempts"] += 1
+            if calls["attempts"] == 1:
+                raise RuntimeError("504 Gateway Timeout: Gateway Timeout")
+            return {"received_bytes": int(headers["X-Upload-Offset"]) + len(content)}
+
+    async def no_wait(_delay):
+        return None
+
+    monkeypatch.setattr(image_tools, "_CLIENT_CHUNK_SIZE_BYTES", 4)
+    monkeypatch.setattr(image_tools.asyncio, "sleep", no_wait)
+    result = asyncio.run(
+        image_tools._upload_chunked_archive(
+            FakeClient(),
+            image_archive_path=str(archive),
+            session_path="/v1/plugin/projects/project-1/apps/image-upload-sessions",
+            complete_action="complete-deploy",
+            complete_payload={"deploy_request": {}},
+        )
+    )
+
+    assert result["task_id"] == "task-1"
+    assert calls["attempts"] == 3
 
 
 def test_get_app_logs_preserves_get_logs_alias(monkeypatch):
