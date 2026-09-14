@@ -99,6 +99,8 @@ def _fmt_dedicated_plan(plan: dict) -> str:
             f"{_compute_value(required, 'cpu_cores')} CPU, {_compute_value(required, 'ram_gb')}GB RAM, "
             f"{_compute_value(required, 'storage_gb')}GB storage, {_compute_value(required, 'gpu_gb')}GB GPU"
         )
+        if item.get("purchase_url"):
+            lines.append(f"  Purchase this recommended machine: {item['purchase_url']}")
     for item in plan.get("shortages") or []:
         required = item.get("required") or {}
         lines.append(
@@ -108,6 +110,11 @@ def _fmt_dedicated_plan(plan: dict) -> str:
         )
     if plan.get("marketplace_nodes"):
         lines.append(f"Recommended marketplace total: ${float(plan.get('marketplace_monthly_total') or 0):.2f}/month")
+        shown_urls = {item.get("purchase_url") for item in plan.get("assignments") or []}
+        for node in plan.get("marketplace_nodes") or []:
+            purchase_url = node.get("purchase_url")
+            if purchase_url and purchase_url not in shown_urls:
+                lines.append(f"Purchase {node.get('node_name', 'recommended machine')}: {purchase_url}")
     return "\n".join(line for line in lines if line)
 
 
@@ -216,10 +223,11 @@ def register_compute_tools(mcp):
             if suggested and plan.get("marketplace_nodes"):
                 lines.append("\nAdequate dedicated machine options right now:")
                 lines.extend(_fmt_catalog_node(node) for node in suggested)
-                lines.append("\nUse the offer page to recheck availability and confirm the reservation:")
-                lines.append(f"Get or confirm your compute here: {data.get('quota_link')}\n")
             elif plan.get("extra_compute_request_available"):
                 lines.append("\nNo active marketplace machine can host this app on one node. Ask the user whether to submit an Extra Compute Request, then call request_extra_compute(..., confirm=true).")
+            if data.get("quota_link"):
+                lines.append("\nOpen this saved compute offer to recheck availability and purchase:")
+                lines.append(f"{data['quota_link']}\n")
             lines.append(data.get("message"))
             return "\n".join(lines)
         except Exception as e:
