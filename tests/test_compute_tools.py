@@ -73,6 +73,69 @@ def test_plan_dedicated_compute_surfaces_one_node_requirement(monkeypatch):
     assert "on one machine" in output
 
 
+def test_plan_dedicated_compute_surfaces_purchase_link(monkeypatch):
+    class FakeClient:
+        async def post(self, path, data):
+            assert path == "/v1/plugin/compute/plan"
+            return {
+                "status": "purchase_required",
+                "can_deploy_now": False,
+                "message": "Purchase the recommended machine.",
+                "assignments": [{
+                    "workload_name": "API",
+                    "node_id": "node-1",
+                    "node_name": "Medium",
+                    "action": "purchase",
+                    "required": {"cpu_cores": 1, "ram_gb": 2, "storage_gb": 10, "gpu_gb": 0},
+                    "purchase_url": "https://portal.example/marketplace?intent=compute-catalog&node_id=node-1",
+                }],
+                "marketplace_nodes": [{
+                    "node_id": "node-1",
+                    "node_name": "Medium",
+                    "monthly_price": 24,
+                    "purchase_url": "https://portal.example/marketplace?intent=compute-catalog&node_id=node-1",
+                }],
+                "marketplace_monthly_total": 24,
+                "shortages": [],
+            }
+
+    monkeypatch.setattr(compute_tools, "_client", lambda: FakeClient())
+    mcp = FakeMCP()
+    register_compute_tools(mcp)
+
+    output = asyncio.run(mcp.tools["plan_dedicated_compute"]("API", 1, 2, 10))
+
+    assert "Purchase this recommended machine" in output
+    assert "intent=compute-catalog&node_id=node-1" in output
+
+
+def test_estimate_compute_always_surfaces_saved_offer_link(monkeypatch):
+    class FakeClient:
+        async def post(self, path, data):
+            assert path == "/v1/plugin/compute/estimate"
+            return {
+                "estimation": {"cpu": 1, "ram": 2, "storage": 10, "gpu": 0},
+                "estimated_price_per_month": 24,
+                "quota_link": "https://portal.example/marketplace?intent=compute-offer&offer_id=offer-1",
+                "message": "Estimate ready.",
+                "marketplace_nodes": [],
+                "dedicated_plan": {"status": "ready", "can_deploy_now": True, "message": "Capacity is ready."},
+            }
+
+        async def get(self, path, params=None):
+            assert path == "/v1/plugin/compute/catalog"
+            return {"nodes": []}
+
+    monkeypatch.setattr(compute_tools, "_client", lambda: FakeClient())
+    mcp = FakeMCP()
+    register_compute_tools(mcp)
+
+    output = asyncio.run(mcp.tools["estimate_compute"](use_case="A small production API"))
+
+    assert "Open this saved compute offer" in output
+    assert "offer_id=offer-1" in output
+
+
 def test_extra_compute_request_requires_confirmation(monkeypatch):
     mcp = FakeMCP()
     register_compute_tools(mcp)
