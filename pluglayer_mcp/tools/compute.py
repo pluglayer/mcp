@@ -136,6 +136,7 @@ def register_compute_tools(mcp):
                 f"Personal nodes: {counts.get('personal', 0)} total, {counts.get('personal_ready', 0)} ready",
                 f"PlugLayer shared nodes: {counts.get('pluglayer', 0)} total, {counts.get('pluglayer_ready', 0)} ready",
                 f"Total available compute: {_fmt_compute(data.get('available_compute'))}",
+                f"Live schedulable headroom: {_fmt_compute(data.get('live_available_compute'))}",
                 f"Total allocated compute: {_fmt_compute(data.get('allocated_compute'))}",
                 f"Total used compute: {_fmt_compute(data.get('used_compute'))}",
                 (
