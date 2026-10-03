@@ -1,5 +1,6 @@
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 
 from pluglayer_mcp.tools import updates as update_tools
 from pluglayer_mcp.tools.updates import ReleaseInfo, register_update_tools
@@ -106,3 +107,32 @@ def test_approved_update_runs_pinned_installer_and_verifies(monkeypatch, tmp_pat
 
     assert "updated from `1.0.0` to `1.1.0`" in result
     assert "Restart or reload Antigravity" in result
+
+
+def test_windows_update_pins_installer_and_zip_to_approved_commit(monkeypatch):
+    calls = {}
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        async def get(self, url):
+            calls["download"] = url
+            return SimpleNamespace(content=b"# fixture installer", raise_for_status=lambda: None)
+    async def communicate():
+        return b"", b""
+    async def spawn(*args, **kwargs):
+        calls["command"] = args
+        assert Path(args[5]).read_bytes() == b"# fixture installer"
+        return SimpleNamespace(returncode=0, communicate=communicate)
+    monkeypatch.setattr(update_tools, "sys", SimpleNamespace(platform="win32"))
+    monkeypatch.setattr(update_tools.httpx, "AsyncClient", Client)
+    monkeypatch.setattr(update_tools.asyncio, "create_subprocess_exec", spawn)
+    sha = "a" * 40
+    assert asyncio.run(update_tools._run_pinned_installer(ReleaseInfo("codex", "1.2.0", sha))) == 0
+    assert calls["download"].endswith(f"/{sha}/install.ps1")
+    command = calls["command"]
+    assert command[:5] == ("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File")
+    assert command[-2:] == ("-ArchiveUrl", f"https://github.com/pluglayer/codex-plugin/archive/{sha}.zip")

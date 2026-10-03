@@ -65,6 +65,11 @@ READ_ONLY_TOOLS: tuple[tuple[str, dict[str, Any]], ...] = (
 )
 
 EXPECTED_TEXT = {
+    "estimate_compute": (
+        "Open this saved compute offer",
+        "intent=compute-offer",
+        "offer_id=",
+    ),
     "add_custom_domain": (
         "was not added to PlugLayer",
         "www.hivecitadel.com",

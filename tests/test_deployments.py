@@ -8,6 +8,17 @@ from pluglayer_mcp.tools.deployment.images import register_images_tools
 from pluglayer_mcp.tools.deployments import _compose_build_commands, _find_existing_project_app_match
 
 
+def test_compose_build_commands_explains_missing_docker(monkeypatch):
+    monkeypatch.setattr("pluglayer_mcp.tools.deployment.helpers.shutil.which", lambda _name: None)
+    output = _compose_build_commands(
+        {"services": [{"service_name": "worker", "strategy": "local_build_image"}]},
+        "/repo",
+        "stack",
+    )
+    assert "Docker is not installed" in output
+    assert "Docker Desktop" in output
+
+
 def test_compose_build_commands_formats_local_build_steps():
     plan = {
         "services": [
