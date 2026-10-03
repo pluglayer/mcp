@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import re
+import sys
 import tempfile
 import time
 from dataclasses import asdict, dataclass
@@ -187,7 +188,9 @@ async def _release_for_check(
 async def _run_pinned_installer(release: ReleaseInfo) -> int:
     metadata = _TARGETS[release.target]
     repo = metadata["repo"]
-    installer_url = f"{_RAW_GITHUB}/pluglayer/{repo}/{release.commit_sha}/install.sh"
+    windows = sys.platform == "win32"
+    filename = "install.ps1" if windows else "install.sh"
+    installer_url = f"{_RAW_GITHUB}/pluglayer/{repo}/{release.commit_sha}/{filename}"
     common_url = f"{_RAW_GITHUB}/pluglayer/{repo}/{release.commit_sha}/install-common.sh"
     archive_url = f"https://github.com/pluglayer/{repo}/archive/{release.commit_sha}.tar.gz"
 
@@ -197,7 +200,7 @@ async def _run_pinned_installer(release: ReleaseInfo) -> int:
         installer = response.content
 
     with tempfile.TemporaryDirectory(prefix="pluglayer-plugin-update-") as temporary_dir:
-        installer_path = Path(temporary_dir) / "install.sh"
+        installer_path = Path(temporary_dir) / filename
         installer_path.write_bytes(installer)
         installer_path.chmod(0o700)
         environment = os.environ.copy()
@@ -208,9 +211,12 @@ async def _run_pinned_installer(release: ReleaseInfo) -> int:
                 "PLUGLAYER_REPO_ARCHIVE_URL": archive_url,
             }
         )
+        command = (["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                    str(installer_path), "-ArchiveUrl",
+                    f"https://github.com/pluglayer/{repo}/archive/{release.commit_sha}.zip"]
+                   if windows else ["/bin/bash", str(installer_path)])
         process = await asyncio.create_subprocess_exec(
-            "/bin/bash",
-            str(installer_path),
+            *command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=environment,
@@ -356,4 +362,3 @@ def register_update_tools(mcp):
             f"✅ PlugLayer for {_TARGETS[target]['label']} updated from `{installed_version}` "
             f"to `{release.version}`. Restart or reload {_TARGETS[target]['label']} to use the new plugin."
         )
-

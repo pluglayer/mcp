@@ -132,6 +132,7 @@ def register_compose_tools(mcp):
                         "replicas": "1",
                         "cpu_limit": "500m",
                         "memory_limit": "512Mi",
+                        "exposure_type": item.get("exposure_type") or "https",
                     }
                     data = await _client().post_multipart(
                         f"/v1/plugin/projects/{project_id}/apps/upload-image",
@@ -167,6 +168,7 @@ def register_compose_tools(mcp):
                         "source": {
                             "type": "compose",
                             "compose_yaml": compose_yaml_to_deploy,
+                            "exposure_type": item.get("exposure_type") or "https",
                         },
                     },
                 )

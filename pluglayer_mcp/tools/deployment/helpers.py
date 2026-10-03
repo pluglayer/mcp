@@ -4,6 +4,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 from copy import deepcopy
 
 import yaml
@@ -51,7 +52,10 @@ def _task_failure_reason(task_check: dict | None) -> str:
 
 
 def _database_family_for_image(image: str) -> str | None:
-    candidate = ((image or "").split(":")[0].split("/")[-1] or "").strip().lower()
+    candidate = str(image or "").split("@", 1)[0].rsplit("/", 1)[-1]
+    if ":" in candidate:
+        candidate = candidate.rsplit(":", 1)[0]
+    candidate = candidate.strip().lower()
     if not candidate:
         return None
     aliases = {
@@ -66,7 +70,7 @@ def _database_family_for_image(image: str) -> str | None:
         "mariadb": "mariadb",
     }
     for alias, canonical in aliases.items():
-        if alias in candidate:
+        if candidate == alias or candidate.startswith(f"{alias}-"):
             return canonical
     return None
 
@@ -359,7 +363,7 @@ def _format_compose_plan(plan: dict) -> str:
             "local_build_image": "local build + uploaded image",
         }.get(strategy, strategy or "service")
         lines.append(
-            f"- **{item.get('service_name')}** → {label} | app `{item.get('suggested_app_name')}` | slug `{item.get('suggested_route_slug')}`"
+            f"- **{item.get('service_name')}** → {label} | exposure `{item.get('exposure_type') or 'https'}` | app `{item.get('suggested_app_name')}` | slug `{item.get('suggested_route_slug')}`"
         )
     notes = plan.get("notes") or []
     if notes:
@@ -386,6 +390,12 @@ def _compose_build_commands(plan: dict, workspace_root: str, image_tag_prefix: s
         "Local build steps for compose services:\n",
         f"Workspace root: `{root}`",
     ]
+    if not shutil.which("docker"):
+        lines.extend([
+            "",
+            "Docker is not installed or is not on PATH on this machine.",
+            "Install Docker Desktop (or provide a compatible remote build path) before running these commands.",
+        ])
     for item in services:
         service = item.get("service_name")
         context = item.get("build_context") or "."
@@ -449,9 +459,12 @@ async def _preview_database_runtime(
 async def _find_database_template_for_family(family: str) -> dict | None:
     templates_data = await _client().get("/v1/plugin/databases/templates")
     templates = templates_data.get("templates", [])
+    exact = next((template for template in templates if str(template.get("slug") or "").lower() == family.lower()), None)
+    if exact:
+        return exact
     for template in templates:
         engine = ((template.get("database_config") or {}).get("engine") or "").lower()
-        if template.get("slug") == family or engine == family:
+        if str(template.get("slug") or "").lower() == family.lower() or engine == family.lower():
             return template
     return None
 
