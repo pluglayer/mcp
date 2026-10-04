@@ -166,6 +166,9 @@ def register_images_tools(mcp):
         compute_placement: str = "personal",
         redeploy_strategy: str = "recreate",
         registry_id: str = "",
+        storage_gb: int = 0,
+        mount_path: str = "/data",
+        health_check_path: str = "",
     ) -> str:
         """Deploy a pullable Docker image after PlugLayer mirrors it into a verified private managed repository. There is no public/direct-image bypass. For a local-only image built on the user's machine, use upload_image_archive_and_deploy() instead."""
         try:
@@ -236,6 +239,9 @@ def register_images_tools(mcp):
                     "replicas": replicas,
                     "cpu_limit": cpu_limit,
                     "memory_limit": memory_limit,
+                    "storage_gb": storage_gb,
+                    "mount_path": mount_path,
+                    "health_check_path": health_check_path or None,
                 },
             }
             data = await _client().post(f"/v1/plugin/projects/{project_id}/apps/push-image", payload)
@@ -265,7 +271,7 @@ def register_images_tools(mcp):
                 lines.append(f"Mirrored image: `{mirrored}`")
             else:
                 lines.append("PlugLayer accepted the deployment only after verifying its managed repository is private.")
-            lines.append("This usually takes around 10 minutes. Feel free to keep working and ask me to check status later.")
+            lines.append("Deployment is queued; rollout time depends on the image and cluster. Ask me to check status when you want an update.")
             lines.append(_fmt_task_hint(task_id))
             lines.extend(_post_deploy_suggestions(app, project_apps))
             return "\n".join(lines)
@@ -288,6 +294,9 @@ def register_images_tools(mcp):
         compute_placement: str = "personal",
         redeploy_strategy: str = "recreate",
         registry_id: str = "",
+        storage_gb: int = 1,
+        mount_path: str = "/data",
+        health_check_path: str = "",
     ) -> str:
         """Upload a locally built Docker/OCI image archive to PlugLayer. If the target app already exists in the project, upload to that app first and redeploy it; otherwise create a new app from the mirrored image."""
         try:
@@ -345,7 +354,7 @@ def register_images_tools(mcp):
                     f"New image tag: `{tag}`\n"
                     + (f"Mirrored image: `{mirrored}`\n" if mirrored else "")
                     + f"Task ID: `{task_id}`\n"
-                    + "This usually takes around 10 minutes. Feel free to keep working and ask me to check status later.\n"
+                    + "Deployment is queued; rollout time depends on the image and cluster. Ask me to check status when you want an update.\n"
                     + _fmt_task_hint(task_id)
                 )
             form_data = {
@@ -361,6 +370,9 @@ def register_images_tools(mcp):
                 "replicas": str(replicas),
                 "cpu_limit": cpu_limit,
                 "memory_limit": memory_limit,
+                "storage_gb": storage_gb,
+                "mount_path": mount_path,
+                "health_check_path": health_check_path or "",
             }
             if os.path.getsize(image_archive_path) <= _CHUNKED_UPLOAD_THRESHOLD_BYTES:
                 data = await _client().post_multipart(
@@ -393,6 +405,9 @@ def register_images_tools(mcp):
                                 "replicas": replicas,
                                 "cpu_limit": cpu_limit,
                                 "memory_limit": memory_limit,
+                                "storage_gb": storage_gb,
+                                "mount_path": mount_path,
+                                "health_check_path": health_check_path or None,
                             },
                         },
                         "wait_seconds": 0,
@@ -415,7 +430,7 @@ def register_images_tools(mcp):
             lines = [f"🚀 Uploaded image app queued: **{name}** (id: `{app.get('id')}`). Task ID: `{task_id}`"]
             if mirrored:
                 lines.append(f"Mirrored image: `{mirrored}`")
-            lines.append("This usually takes around 10 minutes. Feel free to keep working and ask me to check status later.")
+            lines.append("Deployment is queued; rollout time depends on the image and cluster. Ask me to check status when you want an update.")
             lines.append(_fmt_task_hint(task_id))
             lines.extend(_post_deploy_suggestions(app, project_apps))
             return "\n".join(lines)

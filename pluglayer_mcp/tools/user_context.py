@@ -5,6 +5,19 @@ import json
 from pluglayer_mcp.tools.shared import _client, _compact_error
 
 
+def _context_update_summary(payload: dict) -> str:
+    encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    keys = sorted(str(key) for key in payload.keys())
+    key_preview = ", ".join(f"`{key}`" for key in keys[:12]) or "none"
+    if len(keys) > 12:
+        key_preview += f", and {len(keys) - 12} more"
+    return (
+        "User context updated. "
+        f"Stored {len(encoded.encode('utf-8')):,} bytes across {len(keys)} top-level key(s): {key_preview}. "
+        "Use get_user_context() when the full stored value is needed."
+    )
+
+
 def register_user_context_tools(mcp):
     @mcp.tool()
     async def get_user_context() -> str:
@@ -24,6 +37,6 @@ def register_user_context_tools(mcp):
         try:
             data = await _client().patch(f"/v1/plugin/user-context?merge={'true' if merge else 'false'}", context_patch)
             payload = data.get("data", {})
-            return "User context updated.\n\n```json\n" + json.dumps(payload, indent=2, sort_keys=True) + "\n```"
+            return _context_update_summary(payload)
         except Exception as e:
             return _compact_error("Error updating user context", e)
