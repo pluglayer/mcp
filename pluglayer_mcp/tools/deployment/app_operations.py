@@ -114,9 +114,16 @@ def register_app_operations_tools(mcp, get_logs):
         try:
             app_data = await _client().get(f"/v1/plugin/apps/{app_id}")
             app = app_data.get("app", {})
-            await _client().delete(f"/v1/plugin/apps/{app_id}")
+            data = await _client().delete(f"/v1/plugin/apps/{app_id}")
             await _remember_context({"last_completed_task": {"type": "remove_app", "app_id": app_id, "app_name": app.get("name")}})
-            return f"🧹 App **{app.get('name') or app_id}** removed. Its runtime workload and active PlugLayer routing were torn down."
+            task_id = data.get("task_id")
+            return (
+                f"🧹 Removal queued for **{app.get('name') or app_id}**.\n"
+                f"Task ID: `{task_id}`\n"
+                "Its runtime workload, routing, domains, and app volumes will be removed. "
+                "Dedicated compute stays attached to the project for reuse; detach it explicitly if it is no longer needed.\n"
+                f"{_fmt_task_hint(task_id)}"
+            )
         except Exception as e:
             return _compact_error("Error removing app", e)
 
