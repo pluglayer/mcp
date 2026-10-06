@@ -12,6 +12,8 @@ POLICY = {
     "http_rate_limit": {"average": 37, "burst": 81, "period_seconds": 60},
     "tcp_max_connections": 19,
     "allowed_cidrs": ["203.0.113.0/24", "2001:db8::/64"],
+    "egress_mode": "allow_all",
+    "egress_cidrs": [],
 }
 
 
@@ -58,6 +60,7 @@ def update_args():
         "app_id": "app-1", "confirmed_app_name": "api", "http_average": 22,
         "http_burst": 81, "http_period_seconds": 60, "tcp_max_connections": 19,
         "allowed_cidrs": POLICY["allowed_cidrs"],
+        "egress_mode": POLICY["egress_mode"], "egress_cidrs": POLICY["egress_cidrs"],
     }
 
 
