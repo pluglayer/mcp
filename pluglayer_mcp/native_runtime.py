@@ -48,7 +48,7 @@ def unpack_runtime(packed: bytes, destination: Path, *, windows: bool) -> None:
             for entry in archive.infolist():
                 if stat.S_ISLNK(entry.external_attr >> 16):
                     raise ValueError("Connector contains a symbolic link")
-                path = location(entry.filename, entry.file_size)
+                path = location(entry.orig_filename, entry.file_size)
                 if entry.is_dir():
                     path.mkdir(parents=True, exist_ok=True)
                 else:

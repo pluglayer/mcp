@@ -43,7 +43,7 @@ def unpack_bundle(encoded: str, digest: str, destination: Path) -> None:
         for entry in bundle.infolist():
             path = PurePosixPath(entry.filename)
             mode = entry.external_attr >> 16
-            if (path.is_absolute() or ".." in path.parts or "\\" in entry.filename or ":" in entry.filename
+            if (path.is_absolute() or ".." in path.parts or "\\" in entry.orig_filename or ":" in entry.orig_filename
                     or stat.S_ISLNK(mode) or path in seen):
                 raise ValueError("Unsafe plugin bundle member")
             seen.add(path)
