@@ -86,12 +86,12 @@ def refresh_connector(current_release: str) -> Path | None:
     parsed = urlsplit(asset["url"])
     extension = "zip" if sys.platform == "win32" else "tar.gz"
     if (parsed.scheme != "https" or parsed.netloc != "github.com" or parsed.query or parsed.fragment
-            or not re.fullmatch(rf"/pluglayer/[a-z0-9-]+/releases/download/{release}/pluglayer-connector-{computer}\.{re.escape(extension)}", parsed.path)
+            or not re.fullmatch(rf"/pluglayer/mcp/releases/download/{release}/pluglayer-connector-{computer}\.{re.escape(extension)}", parsed.path)
             or not re.fullmatch(r"[a-f0-9]{64}", asset["sha256"])):
         raise ValueError("Untrusted connector asset")
     if sys.platform == "win32" and asset.get("signed") is not True:
         raise ValueError("Unsigned Windows connector")
-    if sys.platform == "darwin" and asset.get("notarized") is not True:
+    if sys.platform == "darwin" and (asset.get("signed") is not True or asset.get("notarized") is not True):
         raise ValueError("Unnotarized macOS connector")
     with httpx.Client(timeout=120, follow_redirects=True) as client:
         with client.stream("GET", asset["url"]) as response:
