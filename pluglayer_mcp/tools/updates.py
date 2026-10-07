@@ -186,6 +186,20 @@ async def _release_for_check(
 
 
 async def _run_pinned_installer(release: ReleaseInfo) -> int:
+    if getattr(sys, "frozen", False):
+        # Native installations retain their bundled connector and never launch
+        # legacy installers that would replace MCP wiring with uvx.
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, "--upgrade", release.target, release.version, release.commit_sha,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            await asyncio.wait_for(process.communicate(), timeout=600)
+        except TimeoutError:
+            process.kill()
+            await process.communicate()
+            return 124
+        return int(process.returncode or 0)
     metadata = _TARGETS[release.target]
     repo = metadata["repo"]
     windows = sys.platform == "win32"
@@ -344,12 +358,12 @@ def register_update_tools(mcp):
         except Exception:
             return (
                 "The approved plugin update could not start. No credential values were exposed; "
-                "run the normal PlugLayer installer in a terminal for diagnostics."
+                "copy a new PlugLayer setup prompt from the portal for guided repair."
             )
         if return_code != 0:
             return (
                 f"The approved {_TARGETS[target]['label']} update did not complete "
-                f"(installer exit {return_code}). Re-run the normal installer in a terminal for diagnostics."
+                f"(installer exit {return_code}). Copy a new setup prompt from the portal for guided repair."
             )
 
         installed_after = _read_installed_version(target)

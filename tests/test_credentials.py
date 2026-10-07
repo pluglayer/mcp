@@ -36,7 +36,10 @@ def test_client_rereads_configured_credential_file(monkeypatch, tmp_path):
 def test_client_rereads_default_credential_file_without_reload(monkeypatch, tmp_path):
     credentials = tmp_path / ".pluglayer" / "credentials.env"
     credentials.parent.mkdir()
-    monkeypatch.setenv("HOME", str(tmp_path))
+    # Exercise the conventional file without changing a process-wide home; this
+    # also works on Windows, whose home lookup uses USERPROFILE rather than HOME.
+    monkeypatch.setattr("pluglayer_mcp.credentials.os.path.expanduser",
+                        lambda value: str(tmp_path / value.removeprefix("~/")))
     monkeypatch.delenv("PLUGLAYER_CREDENTIALS_FILE", raising=False)
     monkeypatch.setattr(settings, "PLUGLAYER_CREDENTIALS_FILE", "")
     monkeypatch.setenv("PLUGLAYER_API_KEY", "stale-parent-token")

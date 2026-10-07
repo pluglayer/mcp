@@ -1,4 +1,5 @@
 import asyncio
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -47,7 +48,8 @@ def test_routine_update_check_is_cached_and_reports_only_newer_versions(monkeypa
     assert "user_approved=true" in first
     assert "available `1.2.4`" in second
     assert calls == ["codex"]
-    assert (tmp_path / "state" / "plugin-update-check.json").stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert (tmp_path / "state" / "plugin-update-check.json").stat().st_mode & 0o777 == 0o600
 
 
 def test_routine_update_check_stays_silent_when_current(monkeypatch, tmp_path):
