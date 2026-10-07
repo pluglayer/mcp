@@ -112,6 +112,21 @@ The MCP calls the PlugLayer FastAPI backend instead of re-implementing backend b
 
 Managed registries are configured by PlugLayer admins in the platform UI/API. When `deploy_image` uses mirroring, the backend picks a registry the current user is allowed to use and keeps Kubernetes pull secrets in sync automatically.
 
+### Runtime networking and replicas
+
+`get_app_access_policy` and `update_app_access_policy` expose outbound policy
+separately from public ingress. `egress_mode=deny_all` permits DNS and
+same-project service traffic but blocks internet destinations. Use
+`egress_mode=allow_cidrs` with explicit IP/CIDR entries for a small set of
+external endpoints; the backend applies this as a per-app Kubernetes
+NetworkPolicy. `allow_all` preserves the platform's normal HTTP/HTTPS egress.
+
+`replicas` creates independent pods. Public routes do not promise cookie or
+header session affinity, and HPA-style CPU autoscaling is not currently
+available through MCP. Stateful WebSocket or room-based services should use a
+single replica or externalize room state and routing until those controls are
+introduced.
+
 Databases are a first-class **Data Layer** workflow in MCP. When a user needs a new database, wants to know whether one already exists, asks for a connection string, or needs env vars to wire an app to a database, the preferred MCP path is:
 
 1. `list_user_databases`

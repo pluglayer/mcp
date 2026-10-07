@@ -16,6 +16,29 @@ class FakeMCP:
         return register
 
 
+def test_remove_project_reports_queued_cleanup_without_recording_completion(monkeypatch):
+    calls = {}
+
+    class FakeClient:
+        async def delete(self, path):
+            calls["path"] = path
+            return {"queued": True, "task_id": "task-1", "archived": False}
+
+    async def remember(payload):
+        raise AssertionError("Queued removal must not be recorded as completed")
+
+    monkeypatch.setattr(identity_projects, "_client", lambda: FakeClient())
+    monkeypatch.setattr(identity_projects, "_remember_context", remember)
+    mcp = FakeMCP()
+    register_identity_project_tools(mcp)
+    output = asyncio.run(mcp.tools["remove_project"]("project-1"))
+    assert calls["path"] == "/v1/plugin/projects/project-1"
+    assert "removal queued" in output
+    assert "task-1" in output
+    assert "get_task_status" in output
+    assert "removed from active use" not in output
+
+
 def test_rename_project_uses_plugin_patch_and_preserves_routing_identity(monkeypatch):
     calls = {}
 

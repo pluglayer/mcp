@@ -8,7 +8,8 @@ from pluglayer_mcp.tools.shared import _client, _compact_error
 def _policy_view(app: dict) -> dict:
     policy = app.get("access_policy")
     if not isinstance(policy, dict) or not {
-        "http_rate_limit", "tcp_max_connections", "allowed_cidrs"
+        "http_rate_limit", "tcp_max_connections", "allowed_cidrs",
+        "egress_mode", "egress_cidrs"
     }.issubset(policy):
         raise ValueError(
             "Backend did not return a complete access policy. Update the backend; "
@@ -23,7 +24,8 @@ def _policy_view(app: dict) -> dict:
         "exposure_type": app.get("exposure_type"),
         "access_policy_protocols": app.get("access_policy_protocols"),
         "access_policy": {key: policy[key] for key in (
-            "http_rate_limit", "tcp_max_connections", "allowed_cidrs"
+        "http_rate_limit", "tcp_max_connections", "allowed_cidrs",
+        "egress_mode", "egress_cidrs"
         )},
     }
 
@@ -34,7 +36,9 @@ def register_access_policy_tools(mcp):
         """Read an accessible app's saved IP allowlist, HTTP rate limit, TCP connection cap,
         and exposure without returning environment values. Use with status/logs for
         'check my apps' or 'check my app security'. Saved policy is not a live traffic audit.
-        Empty allowed_cidrs allows all source IPs. Missing policy is unknown, not defaults.
+        Empty allowed_cidrs allows all source IPs. `egress_mode=deny_all` blocks
+        internet egress while retaining same-project and DNS access; `allow_cidrs`
+        requires explicit IP/CIDR destinations. Missing policy is unknown, not defaults.
         """
         try:
             data = await _client().get(f"/v1/plugin/apps/{app_id}")
@@ -51,6 +55,8 @@ def register_access_policy_tools(mcp):
         http_period_seconds: int,
         tcp_max_connections: int,
         allowed_cidrs: list[str],
+        egress_mode: str = "allow_all",
+        egress_cidrs: list[str] | None = None,
     ) -> str:
         """Replace an app's complete ingress policy after authorized remediation or an
         explicit settings request. Read get_app_access_policy first; preserve every
@@ -59,7 +65,8 @@ def register_access_policy_tools(mcp):
         TCP caps simultaneous connections per route, not requests/sec. Limits are
         local to each route/Traefik instance. CIDRs accept IPv4/IPv6, not URLs/domains;
         [] opens access to all IPs. Never guess trusted clients or turn a public app
-        private without approval. Backend enforces permissions, validation and route
+        private without approval. Egress is enforced by a per-app Kubernetes
+        NetworkPolicy and is independent of public ingress. Backend enforces permissions, validation and route
         readback; no restart is needed. Re-read policy and check legitimate access
         afterward. On timeout or uncertain enforcement, inspect before retrying.
         """
@@ -77,6 +84,8 @@ def register_access_policy_tools(mcp):
                 },
                 "tcp_max_connections": tcp_max_connections,
                 "allowed_cidrs": allowed_cidrs,
+                "egress_mode": egress_mode,
+                "egress_cidrs": egress_cidrs or [],
             })
             view = _policy_view(result.get("app") or {})
             view["applied_routes"] = result.get("applied_routes")
