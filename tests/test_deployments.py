@@ -1,5 +1,7 @@
 import asyncio
 import inspect
+import json
+import os
 
 from pluglayer_mcp.tools.deployment import app_read, images as image_tools
 from pluglayer_mcp.tools.deployment.app_operations import register_app_operations_tools
@@ -37,7 +39,7 @@ def test_compose_build_commands_formats_local_build_steps():
     assert "docker" in output
     assert "Dockerfile.worker" in output
     assert ".pluglayer/worker.oci.tar" in output
-    assert 'local_image_archives={"worker": "/repo/.pluglayer/worker.oci.tar"}' in output
+    assert f'local_image_archives={json.dumps({"worker": os.path.join("/repo", ".pluglayer/worker.oci.tar")})}' in output
 
 
 def test_find_existing_project_app_match_prefers_exact_slug():

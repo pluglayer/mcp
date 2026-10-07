@@ -429,9 +429,9 @@ def _compose_build_commands(plan: dict, workspace_root: str, image_tag_prefix: s
         if item.get("command_args"):
             lines.append(f"  Startup args preserved: `{item.get('command_args')}`")
         lines.append(
-            "  Then call `deploy_compose(..., local_image_archives={"
-            + f"\"{service}\": \"{os.path.join(root, archive)}\""
-            + "})`."
+            "  Then call `deploy_compose(..., local_image_archives="
+            + json.dumps({service: os.path.join(root, archive)})
+            + ")`."
         )
     return "\n".join(lines)
 

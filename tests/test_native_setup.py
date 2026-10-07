@@ -143,7 +143,10 @@ def test_setup_rejects_untrusted_urls(url):
 def test_bundle_rejects_unsafe_paths(tmp_path, name):
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as bundle:
-        bundle.writestr(name, b"test")
+        member = zipfile.ZipInfo("unsafe")
+        # ZipInfo normalizes native separators on Windows; retain hostile wire bytes.
+        member.filename = name
+        bundle.writestr(member, b"test")
     packed = buffer.getvalue()
     with pytest.raises(ValueError):
         native_setup.unpack_bundle(base64.b64encode(packed).decode(), hashlib.sha256(packed).hexdigest(), tmp_path)
