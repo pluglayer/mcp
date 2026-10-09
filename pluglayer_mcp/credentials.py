@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shlex
+from contextvars import ContextVar
 from pathlib import Path
 
 from pluglayer_mcp.settings import settings
@@ -19,6 +20,16 @@ _UNSAFE_TOKEN_ERROR = (
     "contains a control character. Save the token again, then retry the tool."
 )
 _DEFAULT_CREDENTIALS_FILE = "~/.pluglayer/credentials.env"
+_REMOTE_API_KEY: ContextVar[str | None] = ContextVar("pluglayer_remote_api_key", default=None)
+
+
+def set_remote_api_key(value: str):
+    """Set the per-request bearer token used by the hosted MCP service."""
+    return _REMOTE_API_KEY.set(value)
+
+
+def reset_remote_api_key(token) -> None:
+    _REMOTE_API_KEY.reset(token)
 
 
 def _credential_file_path() -> Path | None:
@@ -77,9 +88,9 @@ def _runtime_value(key: str, settings_value: str) -> str:
 
 def resolve_api_key(explicit: str | None = None) -> str:
     """Return a safe current token, preferring a configured live credential file."""
-    raw_value = (
-        explicit
-        if explicit is not None
+    remote_value = _REMOTE_API_KEY.get()
+    raw_value = explicit if explicit is not None else (
+        remote_value if remote_value is not None
         else _runtime_value("PLUGLAYER_API_KEY", settings.PLUGLAYER_API_KEY)
     )
     token = (raw_value or "").strip()

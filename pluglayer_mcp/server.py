@@ -152,7 +152,8 @@ def main():
 
 def serve_http():
     """Explicit HTTP entry point for hosted or local streamable HTTP serving."""
-    mcp.run(transport="streamable-http")
+    from pluglayer_mcp.remote import serve
+    serve()
 
 
 if __name__ == "__main__":
