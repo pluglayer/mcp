@@ -17,13 +17,11 @@ dependencies = [
     "pydantic-settings>=2.4.0",
     "PyYAML>=6.0.2",
     "uvicorn[standard]>=0.30.0",
-    "tomlkit>=0.13.2,<1",
 ]
 
 [project.scripts]
 pluglayer-mcp = "pluglayer_mcp.server:main"
 pluglayer-mcp-http = "pluglayer_mcp.server:serve_http"
-pluglayer-connector = "pluglayer_mcp.native:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pluglayer_mcp"]

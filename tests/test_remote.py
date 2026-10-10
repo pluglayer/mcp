@@ -24,11 +24,11 @@ def test_remote_api_key_is_request_scoped():
 
     async def run():
         async with AsyncClient(transport=ASGITransport(app=_app(seen)), base_url="http://test") as client:
-            response = await client.get("/mcp", headers={"Authorization": "Bearer plk_remote_test"})
+            response = await client.get("/mcp", headers={"Authorization": "Bearer ploa_remote_test"})
             assert response.status_code == 200
 
     asyncio.run(run())
-    assert seen == ["plk_remote_test"]
+    assert seen == ["ploa_remote_test"]
 
 
 def test_remote_requires_bearer():

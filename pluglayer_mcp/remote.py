@@ -29,12 +29,15 @@ class BearerMiddleware:
             response = JSONResponse(
                 {"error": "authorization_required", "message": "Connect through the PlugLayer setup prompt."},
                 status_code=401,
-                headers={"WWW-Authenticate": "Bearer", "Cache-Control": "no-store"},
+                headers={
+                    "WWW-Authenticate": 'Bearer resource_metadata="/.well-known/oauth-protected-resource"',
+                    "Cache-Control": "no-store",
+                },
             )
             await response(scope, receive, send)
             return
         bearer = token.strip()
-        if any(ord(character) < 32 or ord(character) == 127 for character in bearer):
+        if not bearer.startswith("ploa_") or any(ord(character) < 32 or ord(character) == 127 for character in bearer):
             response = JSONResponse({"error": "invalid_authorization"}, status_code=401)
             await response(scope, receive, send)
             return
@@ -52,7 +55,20 @@ def serve() -> None:
     async def health(_request):
         return JSONResponse({"status": "ok", "service": "pluglayer-mcp"})
 
+    async def resource_metadata(request):
+        resource = (settings.MCP_RESOURCE_URL or "").strip().rstrip("/")
+        if not resource:
+            resource = str(request.base_url).rstrip("/") + "/mcp"
+        issuer = (settings.MCP_OAUTH_ISSUER or "").strip().rstrip("/")
+        return JSONResponse({
+            "resource": resource,
+            "authorization_servers": [issuer] if issuer else [],
+            "scopes_supported": ["pluglayer.read", "pluglayer.write"],
+            "bearer_methods_supported": ["header"],
+        }, headers={"Cache-Control": "public, max-age=300"})
+
     app.add_route("/healthz", health, methods=["GET"])
+    app.add_route("/.well-known/oauth-protected-resource", resource_metadata, methods=["GET"])
     app.add_middleware(BearerMiddleware)
     host = os.environ.get("MCP_HOST", "0.0.0.0")
     port = int(os.environ.get("MCP_PORT", str(settings.MCP_PORT or 8787)))
