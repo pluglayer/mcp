@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from urllib.parse import urlsplit, urlunsplit
 
 import uvicorn
 from starlette.responses import JSONResponse
@@ -18,6 +19,18 @@ class BearerMiddleware:
     def __init__(self, app):
         self.app = app
 
+    @staticmethod
+    def _resource_metadata_url(scope) -> str:
+        configured = (settings.MCP_RESOURCE_URL or "").strip()
+        if configured:
+            parsed = urlsplit(configured)
+            if parsed.scheme and parsed.netloc:
+                return urlunsplit((parsed.scheme, parsed.netloc, "/.well-known/oauth-protected-resource", "", ""))
+        headers = {key.lower(): value for key, value in scope.get("headers", [])}
+        host = headers.get(b"host", b"localhost").decode("latin-1")
+        scheme = scope.get("scheme", "https")
+        return f"{scheme}://{host}/.well-known/oauth-protected-resource"
+
     async def __call__(self, scope, receive, send):
         if scope.get("type") != "http" or scope.get("path", "").rstrip("/") not in {"/mcp", ""}:
             await self.app(scope, receive, send)
@@ -30,7 +43,11 @@ class BearerMiddleware:
                 {"error": "authorization_required", "message": "Connect through the PlugLayer setup prompt."},
                 status_code=401,
                 headers={
-                    "WWW-Authenticate": 'Bearer resource_metadata="/.well-known/oauth-protected-resource"',
+                    "WWW-Authenticate": (
+                        'Bearer resource_metadata="'
+                        f"{self._resource_metadata_url(scope)}"
+                        '"'
+                    ),
                     "Cache-Control": "no-store",
                 },
             )
