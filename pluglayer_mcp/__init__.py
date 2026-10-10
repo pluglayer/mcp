@@ -1,2 +1,2 @@
 """PlugLayer MCP Server — AI-native infrastructure operator."""
-__version__ = "0.1.14"
+__version__ = "0.1.15"
