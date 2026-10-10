@@ -2,7 +2,18 @@
 
 Deploy and manage your infrastructure through natural language with any MCP-compatible AI assistant.
 
-## Installation
+## Public plugin setup
+
+Public PlugLayer plugins use the hosted MCP endpoint with OAuth. In the
+PlugLayer portal, choose Codex, Claude Code, Cursor, or Antigravity, copy the
+setup prompt, paste it into the agent, and approve PlugLayer in the browser.
+The agent stores and refreshes its OAuth connection. No Python, uv, terminal,
+desktop app, or API token is required.
+
+The local commands below are an advanced developer path for explicitly running
+an MCP server on the same machine.
+
+## Local installation
 
 ### Option 1: uvx (recommended — no install needed)
 ```bash
@@ -67,10 +78,9 @@ remove the manual copy so tool calls cannot land on servers with different
 authentication state.
 
 ### Remote HTTP (hosted)
-The remote MCP server runs at `mcp.pluglayer.com`. Pass your token as:
-```
-Authorization: Bearer your-pluglayer-api-token
-```
+The remote MCP server runs at `https://mcp.pluglayer.com/mcp` and uses OAuth
+metadata discovery. Add that URL in an agent's remote MCP settings and choose
+browser authentication; do not paste a PlugLayer API token into chat.
 
 If you intentionally want to run the package itself as an HTTP MCP server, use:
 

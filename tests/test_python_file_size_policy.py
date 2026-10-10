@@ -12,7 +12,7 @@ def test_mcp_and_plugin_python_files_stay_within_size_limit():
         for path in (repo_root / surface).rglob("*.py"):
             if any(part in {".uv-cache", ".venv", "__pycache__"} for part in path.parts):
                 continue
-            line_count = len(path.read_text().splitlines())
+            line_count = len(path.read_text(encoding="utf-8").splitlines())
             if line_count > MAX_PYTHON_LINES:
                 oversized.append(f"{path.relative_to(repo_root)}: {line_count} lines")
 

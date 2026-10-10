@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     PLUGLAYER_CREDENTIALS_FILE: str = ""
     MCP_HOST: str = "127.0.0.1"
     MCP_PORT: int = 0
+    MCP_OAUTH_ISSUER: str = ""
+    MCP_RESOURCE_URL: str = ""
     DEBUG: bool = False
 
     model_config = SettingsConfigDict(env_file=".env")

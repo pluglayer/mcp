@@ -1,5 +1,4 @@
 import json
-import subprocess
 import tomllib
 from pathlib import Path
 
@@ -8,43 +7,14 @@ def _json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def test_public_plugins_declare_mcp_components_in_target_native_shape():
+def test_public_plugins_declare_hosted_oauth_mcp_components():
     repo_root = Path(__file__).resolve().parents[2]
     plugins = repo_root / "plugins"
-
-    codex_root = plugins / "pluglayer-codex-plugin"
-    codex_manifest = _json(codex_root / ".codex-plugin" / "plugin.json")
-    assert codex_manifest["mcpServers"] == "./.mcp.json"
-    codex_mcp = _json(codex_root / ".mcp.json")
-    assert "pluglayer" in codex_mcp["mcpServers"]
-    assert codex_mcp["mcpServers"]["pluglayer"] == {
-        "command": "uvx",
-        "type": "stdio",
-        "args": ["pluglayer-mcp@latest"],
-    }
-
-    claude_root = plugins / "pluglayer-claude-plugin"
-    claude_mcp = _json(claude_root / ".mcp.json")
-    assert "mcpServers" not in claude_mcp
-    assert "pluglayer" in claude_mcp
-    assert "uvx pluglayer-mcp@latest" in claude_mcp["pluglayer"]["args"][-1]
-
-    cursor_root = plugins / "pluglayer-cursor-plugin"
-    cursor_manifest = _json(cursor_root / ".cursor-plugin" / "plugin.json")
-    assert cursor_manifest["mcp"] == "./mcp.json"
-    cursor_mcp = _json(cursor_root / "mcp.json")
-    assert "pluglayer" in cursor_mcp
-    cursor_command = cursor_mcp["pluglayer"]["args"][-1]
-    assert cursor_mcp["pluglayer"]["args"][0] == "-c"
-    assert "PLUGLAYER_CREDENTIALS_FILE" in cursor_command
-    assert "uvx pluglayer-mcp@latest" in cursor_command
-    assert ". \"$credential_file\"" not in cursor_command
-    assert "exit 78" not in cursor_command
-
-    antigravity_root = plugins / "pluglayer-antigravity-plugin"
-    antigravity_mcp = _json(antigravity_root / "mcp_config.json")
-    assert "pluglayer" in antigravity_mcp["mcpServers"]
-    assert "uvx pluglayer-mcp@latest" in antigravity_mcp["mcpServers"]["pluglayer"]["args"][-1]
+    codex_mcp = _json(plugins / "pluglayer-codex-plugin" / ".mcp.json")
+    assert codex_mcp["mcpServers"]["pluglayer"] == {"type": "http", "url": "https://mcp.pluglayer.com/mcp", "extensions": {"com.openai": {"auth": {"type": "oauth"}}}}
+    assert _json(plugins / "pluglayer-claude-plugin" / ".mcp.json")["pluglayer"] == {"type": "http", "url": "https://mcp.pluglayer.com/mcp"}
+    assert _json(plugins / "pluglayer-cursor-plugin" / "mcp.json")["pluglayer"] == {"url": "https://mcp.pluglayer.com/mcp"}
+    assert _json(plugins / "pluglayer-antigravity-plugin" / "mcp_config.json")["mcpServers"]["pluglayer"] == {"serverUrl": "https://mcp.pluglayer.com/mcp"}
 
 
 def test_public_plugin_icons_follow_target_manifest_schemas():
@@ -71,7 +41,7 @@ def test_public_plugin_icons_follow_target_manifest_schemas():
     assert f'Icon(src="{icon_url}")' in server
 
 
-def test_every_public_plugin_bundles_consent_gated_update_guidance():
+def test_every_public_plugin_bundles_marketplace_update_guidance():
     repo_root = Path(__file__).resolve().parents[2]
     for target in ("codex", "claude", "cursor", "antigravity"):
         skill = (
@@ -83,88 +53,9 @@ def test_every_public_plugin_bundles_consent_gated_update_guidance():
             / "SKILL.md"
         )
         text = skill.read_text(encoding="utf-8")
-        assert "check_plugin_updates" in text
-        assert "24-hour cache" in text
-        assert "Never update automatically" in text
-        assert "user_approved=true" in text
-
-
-def test_cursor_plugin_starts_without_auth_for_live_tool_discovery(tmp_path):
-    repo_root = Path(__file__).resolve().parents[2]
-    cursor_mcp = _json(
-        repo_root / "plugins" / "pluglayer-cursor-plugin" / "mcp.json"
-    )
-    cursor_command = cursor_mcp["pluglayer"]["args"][-1]
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    uvx = bin_dir / "uvx"
-    uvx.write_text(
-        "#!/bin/sh\nprintf '%s\\n' \"$PLUGLAYER_CREDENTIALS_FILE\" \"$*\"\n",
-        encoding="utf-8",
-    )
-    uvx.chmod(0o755)
-    env = {
-        "HOME": str(tmp_path),
-        "PATH": str(bin_dir),
-    }
-
-    result = subprocess.run(
-        ["/bin/bash", "-c", cursor_command],
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert result.returncode == 0
-    assert result.stdout.splitlines() == [
-        str(tmp_path / ".pluglayer" / "credentials.env"),
-        "pluglayer-mcp@latest",
-    ]
-
-
-def test_cursor_installer_warns_about_duplicate_mcp_registration():
-    repo_root = Path(__file__).resolve().parents[2]
-    installer = (
-        repo_root / "plugins" / "pluglayer-cursor-plugin" / "install-common.sh"
-    ).read_text(encoding="utf-8")
-
-    assert "warn_cursor_duplicate_mcp" in installer
-    assert '${HOME}/.cursor/mcp.json' in installer
-    assert '${INVOKED_FROM_DIR}/.cursor/mcp.json' in installer
-    assert "different authentication state" in installer
-
-
-def test_every_public_installer_supports_portal_quick_setup():
-    repo_root = Path(__file__).resolve().parents[2]
-    plugin_roots = [
-        "pluglayer-codex-plugin",
-        "pluglayer-claude-plugin",
-        "pluglayer-cursor-plugin",
-        "pluglayer-antigravity-plugin",
-    ]
-
-    for plugin_root in plugin_roots:
-        installer = (
-            repo_root / "plugins" / plugin_root / "install-common.sh"
-        ).read_text(encoding="utf-8")
-        assert 'PLUGLAYER_QUICK_INSTALL="${PLUGLAYER_QUICK_INSTALL:-0}"' in installer
-        assert 'if [ "${PLUGLAYER_QUICK_INSTALL}" = "1" ]; then' in installer
-        assert "install_target" in installer
-        assert "restart_instructions" in installer
-
-
-def test_codex_installer_uses_the_personal_marketplace_plugin_directory():
-    repo_root = Path(__file__).resolve().parents[2]
-    installer = (
-        repo_root / "plugins" / "pluglayer-codex-plugin" / "install-common.sh"
-    ).read_text(encoding="utf-8")
-
-    assert 'MARKETPLACE_FILE="${HOME}/.agents/plugins/marketplace.json"' in installer
-    assert 'MARKETPLACE_PLUGIN_DIR="${HOME}/plugins"' in installer
-    assert 'MARKETPLACE_PLUGIN_DIR="${HOME}/.agents/plugins/plugins"' not in installer
-    assert 'verify_codex_install' in installer
-    assert '/Applications/ChatGPT.app/Contents/Resources/codex' in installer
+        assert "marketplace" in text
+        assert "shell installer" in text
+        assert "API token" in text
 
 
 def test_mcp_python_sdk_stays_on_fastmcp_compatible_v1():
