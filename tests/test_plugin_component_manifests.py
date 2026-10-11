@@ -121,6 +121,19 @@ def test_every_public_plugin_publishes_target_installation_instructions():
         assert "Do not ask the user to type terminal commands" in text
 
 
+def test_all_public_plugin_versions_are_aligned():
+    repo_root = Path(__file__).resolve().parents[2]
+    expected = "1.1.34"
+    versions = {
+        "codex-portable": _json(repo_root / "plugins/pluglayer-codex-plugin/plugin.json")["version"],
+        "codex-legacy": _json(repo_root / "plugins/pluglayer-codex-plugin/.codex-plugin/plugin.json")["version"],
+        "claude": _json(repo_root / "plugins/pluglayer-claude-plugin/.claude-plugin/plugin.json")["version"],
+        "cursor": _json(repo_root / "plugins/pluglayer-cursor-plugin/.cursor-plugin/plugin.json")["version"],
+        "antigravity": (repo_root / "plugins/pluglayer-antigravity-plugin/VERSION").read_text().strip(),
+    }
+    assert versions == {name: expected for name in versions}
+
+
 def test_mcp_python_sdk_stays_on_fastmcp_compatible_v1():
     repo_root = Path(__file__).resolve().parents[2]
     with (repo_root / "pluglayer-mcp" / "pyproject.toml").open("rb") as handle:
