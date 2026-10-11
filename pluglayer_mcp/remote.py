@@ -13,6 +13,24 @@ from pluglayer_mcp.server import mcp
 from pluglayer_mcp.settings import settings
 
 
+def oauth_authorization_server_metadata() -> dict[str, object]:
+    """Build compatibility discovery from the configured API OAuth issuer."""
+    issuer = (settings.MCP_OAUTH_ISSUER or "").strip().rstrip("/")
+    return {
+        "issuer": issuer,
+        "authorization_endpoint": f"{issuer}/authorize" if issuer else "",
+        "token_endpoint": f"{issuer}/token" if issuer else "",
+        "registration_endpoint": f"{issuer}/register" if issuer else "",
+        "revocation_endpoint": f"{issuer}/revoke" if issuer else "",
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "code_challenge_methods_supported": ["S256"],
+        "token_endpoint_auth_methods_supported": ["none"],
+        "authorization_response_iss_parameter_supported": True,
+        "scopes_supported": ["pluglayer.read", "pluglayer.write"],
+    }
+
+
 class BearerMiddleware:
     """Inject the request bearer into a context variable without leaking it."""
 
@@ -84,8 +102,19 @@ def serve() -> None:
             "bearer_methods_supported": ["header"],
         }, headers={"Cache-Control": "public, max-age=300"})
 
+    async def authorization_server_metadata(_request):
+        """Expose a compatibility discovery copy at the resource host.
+
+        The configured API issuer remains authoritative.  Some native clients
+        cache or fall back to authorization-server discovery at the MCP origin;
+        returning the exact API endpoints prevents them from constructing
+        ``https://mcp.pluglayer.com/authorize``.
+        """
+        return JSONResponse(oauth_authorization_server_metadata(), headers={"Cache-Control": "public, max-age=300"})
+
     app.add_route("/healthz", health, methods=["GET"])
     app.add_route("/.well-known/oauth-protected-resource", resource_metadata, methods=["GET"])
+    app.add_route("/.well-known/oauth-authorization-server", authorization_server_metadata, methods=["GET"])
     app.add_middleware(BearerMiddleware)
     host = os.environ.get("MCP_HOST", "0.0.0.0")
     port = int(os.environ.get("MCP_PORT", str(settings.MCP_PORT or 8787)))
