@@ -37,6 +37,9 @@ def test_remote_requires_bearer():
             response = await client.get("/mcp")
             assert response.status_code == 401
             assert response.json()["error"] == "authorization_required"
+            assert response.headers["WWW-Authenticate"] == (
+                'Bearer resource_metadata="http://test/.well-known/oauth-protected-resource"'
+            )
 
     asyncio.run(run())
 

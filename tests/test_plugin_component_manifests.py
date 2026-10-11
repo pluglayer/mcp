@@ -12,6 +12,10 @@ def test_public_plugins_declare_hosted_oauth_mcp_components():
     plugins = repo_root / "plugins"
     codex_mcp = _json(plugins / "pluglayer-codex-plugin" / ".mcp.json")
     assert codex_mcp["mcpServers"]["pluglayer"] == {"type": "http", "url": "https://mcp.pluglayer.com/mcp", "extensions": {"com.openai": {"auth": {"type": "oauth"}}}}
+    codex_portable_mcp = _json(plugins / "pluglayer-codex-plugin" / "mcp.json")
+    assert codex_portable_mcp["$schema"].endswith("/mcp.schema.json")
+    assert codex_portable_mcp["mcpServers"]["pluglayer"]["type"] == "streamable-http"
+    assert codex_portable_mcp["mcpServers"]["pluglayer"]["extensions"]["com.openai"]["auth"]["type"] == "oauth"
     assert _json(plugins / "pluglayer-claude-plugin" / ".mcp.json")["pluglayer"] == {"type": "http", "url": "https://mcp.pluglayer.com/mcp"}
     assert _json(plugins / "pluglayer-cursor-plugin" / "mcp.json")["pluglayer"] == {"url": "https://mcp.pluglayer.com/mcp"}
     assert _json(plugins / "pluglayer-antigravity-plugin" / "mcp_config.json")["mcpServers"]["pluglayer"] == {"serverUrl": "https://mcp.pluglayer.com/mcp"}
@@ -23,6 +27,9 @@ def test_public_plugin_icons_follow_target_manifest_schemas():
     icon_url = "https://pluglayer.com/pluglayer-icon.png"
 
     codex_root = plugins / "pluglayer-codex-plugin"
+    codex_portable = _json(codex_root / "plugin.json")
+    assert codex_portable["$schema"].endswith("/plugin.schema.json")
+    assert codex_portable["extensions"]["com.openai"]["interface"]["composerIcon"] == "./assets/pluglayer-icon.png"
     codex = _json(codex_root / ".codex-plugin" / "plugin.json")
     assert codex["interface"]["composerIcon"] == "./assets/pluglayer-icon.png"
     assert codex["interface"]["logo"] == "./assets/pluglayer-icon.png"
@@ -56,6 +63,43 @@ def test_every_public_plugin_bundles_marketplace_update_guidance():
         assert "marketplace" in text
         assert "shell installer" in text
         assert "API token" in text
+
+
+def test_codex_bundles_all_public_agent_definitions_and_setup_skill():
+    repo_root = Path(__file__).resolve().parents[2]
+    root = repo_root / "plugins" / "pluglayer-codex-plugin"
+    expected = {
+        "pluglayer-deploy.toml",
+        "pluglayer-domain-setup.toml",
+        "pluglayer-feedback.toml",
+        "pluglayer-fix-deploy.toml",
+        "pluglayer-security.toml",
+        "pluglayer-setup-cicd.toml",
+        "pluglayer-templates.toml",
+    }
+    assert {p.name for p in (root / "agents").glob("*.toml")} == expected
+    for path in (root / "agents").glob("*.toml"):
+        agent = tomllib.loads(path.read_text(encoding="utf-8"))
+        assert set(("name", "description", "developer_instructions")) <= set(agent)
+    setup = (root / "skills" / "setup" / "SKILL.md").read_text(encoding="utf-8")
+    assert "~/.codex/agents/" in setup
+    assert "Cloud ChatGPT cannot register local Codex TOML agents" in setup
+
+
+def test_native_agent_packs_are_complete_across_editor_plugins():
+    repo_root = Path(__file__).resolve().parents[2]
+    expected = {
+        "pluglayer-deploy.md",
+        "pluglayer-domain-setup.md",
+        "pluglayer-feedback.md",
+        "pluglayer-fix-deploy.md",
+        "pluglayer-security.md",
+        "pluglayer-setup-cicd.md",
+        "pluglayer-templates.md",
+    }
+    for target in ("claude", "cursor", "antigravity"):
+        root = repo_root / "plugins" / f"pluglayer-{target}-plugin"
+        assert {p.name for p in (root / "agents").glob("*.md")} == expected
 
 
 def test_mcp_python_sdk_stays_on_fastmcp_compatible_v1():
