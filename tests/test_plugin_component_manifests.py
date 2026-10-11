@@ -110,6 +110,17 @@ def test_native_agent_packs_are_complete_across_editor_plugins():
         assert {p.name for p in (root / "agents").glob("*.md")} == expected
 
 
+def test_every_public_plugin_publishes_target_installation_instructions():
+    repo_root = Path(__file__).resolve().parents[2]
+    for target in ("codex", "claude", "cursor", "antigravity"):
+        path = repo_root / "plugins" / f"pluglayer-{target}-plugin" / "installation_instruction.md"
+        text = path.read_text(encoding="utf-8")
+        assert "https://mcp.pluglayer.com/mcp" in text
+        assert "get_current_user" in text and "list_projects" in text
+        assert "Never request or print an API token" in text
+        assert "Do not ask the user to type terminal commands" in text
+
+
 def test_mcp_python_sdk_stays_on_fastmcp_compatible_v1():
     repo_root = Path(__file__).resolve().parents[2]
     with (repo_root / "pluglayer-mcp" / "pyproject.toml").open("rb") as handle:
