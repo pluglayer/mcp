@@ -11,11 +11,19 @@ def test_public_plugins_declare_hosted_oauth_mcp_components():
     repo_root = Path(__file__).resolve().parents[2]
     plugins = repo_root / "plugins"
     codex_mcp = _json(plugins / "pluglayer-codex-plugin" / ".mcp.json")
-    assert codex_mcp["mcpServers"]["pluglayer"] == {"type": "http", "url": "https://mcp.pluglayer.com/mcp", "extensions": {"com.openai": {"auth": {"type": "oauth"}}}}
+    assert codex_mcp["mcpServers"]["pluglayer"]["type"] == "http"
+    assert codex_mcp["mcpServers"]["pluglayer"]["url"] == "https://mcp.pluglayer.com/mcp"
+    assert codex_mcp["mcpServers"]["pluglayer"]["extensions"]["com.openai"]["auth"]["type"] == "oauth"
     codex_portable_mcp = _json(plugins / "pluglayer-codex-plugin" / "mcp.json")
     assert codex_portable_mcp["$schema"].endswith("/mcp.schema.json")
     assert codex_portable_mcp["mcpServers"]["pluglayer"]["type"] == "streamable-http"
     assert codex_portable_mcp["mcpServers"]["pluglayer"]["extensions"]["com.openai"]["auth"]["type"] == "oauth"
+    codex_auth = codex_portable_mcp["mcpServers"]["pluglayer"]["extensions"]["com.openai"]["auth"]
+    assert codex_auth["authorizationServerBase"] == "https://api.pluglayer.com/v1/mcp/oauth"
+    assert codex_auth["authorizationUrl"] == "https://api.pluglayer.com/v1/mcp/oauth/authorize"
+    assert codex_auth["tokenUrl"] == "https://api.pluglayer.com/v1/mcp/oauth/token"
+    assert codex_auth["registrationUrl"] == "https://api.pluglayer.com/v1/mcp/oauth/register"
+    assert codex_auth["resource"] == "https://mcp.pluglayer.com/mcp"
     assert _json(plugins / "pluglayer-claude-plugin" / ".mcp.json")["pluglayer"] == {"type": "http", "url": "https://mcp.pluglayer.com/mcp"}
     assert _json(plugins / "pluglayer-cursor-plugin" / "mcp.json")["pluglayer"] == {"url": "https://mcp.pluglayer.com/mcp"}
     assert _json(plugins / "pluglayer-antigravity-plugin" / "mcp_config.json")["mcpServers"]["pluglayer"] == {"serverUrl": "https://mcp.pluglayer.com/mcp"}

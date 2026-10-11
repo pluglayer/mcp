@@ -61,3 +61,10 @@ def test_remote_health_is_public_for_readiness_checks():
             assert response.status_code == 200
 
     asyncio.run(run())
+
+
+def test_remote_authorization_server_metadata_uses_configured_api_issuer(monkeypatch):
+    monkeypatch.setattr(remote.settings, "MCP_OAUTH_ISSUER", "https://api.example.test/v1/mcp/oauth")
+    payload = remote.oauth_authorization_server_metadata()
+    assert payload["issuer"] == "https://api.example.test/v1/mcp/oauth"
+    assert payload["authorization_endpoint"] == "https://api.example.test/v1/mcp/oauth/authorize"
