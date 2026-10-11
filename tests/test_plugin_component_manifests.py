@@ -123,7 +123,7 @@ def test_every_public_plugin_publishes_target_installation_instructions():
 
 def test_all_public_plugin_versions_are_aligned():
     repo_root = Path(__file__).resolve().parents[2]
-    expected = "1.1.33"
+    expected = "1.1.34"
     versions = {
         "codex-portable": _json(repo_root / "plugins/pluglayer-codex-plugin/plugin.json")["version"],
         "codex-legacy": _json(repo_root / "plugins/pluglayer-codex-plugin/.codex-plugin/plugin.json")["version"],
