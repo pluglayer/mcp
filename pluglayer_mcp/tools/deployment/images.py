@@ -170,7 +170,7 @@ def register_images_tools(mcp):
         mount_path: str = "/data",
         health_check_path: str = "",
     ) -> str:
-        """Deploy a pullable Docker image after PlugLayer mirrors it into a verified private managed repository. There is no public/direct-image bypass. For a local-only image built on the user's machine, use upload_image_archive_and_deploy() instead."""
+        """Deploy a pullable image after private mirroring and backend non-root identity validation. Named users are resolved automatically; root-start custom images need a compatible non-root USER and writable application paths. Requested persistent storage is writable through the app's own volume group. For a local-only image, use upload_image_archive_and_deploy()."""
         try:
             database_family = _database_family_for_image(image)
             if database_family:
@@ -298,7 +298,7 @@ def register_images_tools(mcp):
         mount_path: str = "/data",
         health_check_path: str = "",
     ) -> str:
-        """Upload a locally built Docker/OCI image archive to PlugLayer. If the target app already exists in the project, upload to that app first and redeploy it; otherwise create a new app from the mirrored image."""
+        """Upload a locally built Docker/OCI image archive to PlugLayer. The backend rejects root-start images early, resolves non-root users before rollout, and grants write access only to app-owned persistent storage. If the target app already exists in the project, upload to that app first and redeploy it; otherwise create a new app from the mirrored image."""
         try:
             if not os.path.exists(image_archive_path):
                 return f"Image archive not found: {image_archive_path}"
