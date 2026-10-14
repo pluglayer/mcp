@@ -13,17 +13,13 @@ def test_public_plugins_declare_hosted_oauth_mcp_components():
     codex_mcp = _json(plugins / "pluglayer-codex-plugin" / ".mcp.json")
     assert codex_mcp["mcpServers"]["pluglayer"]["type"] == "http"
     assert codex_mcp["mcpServers"]["pluglayer"]["url"] == "https://mcp.pluglayer.com/mcp"
-    assert codex_mcp["mcpServers"]["pluglayer"]["extensions"]["com.openai"]["auth"]["type"] == "oauth"
+    assert set(codex_mcp["mcpServers"]["pluglayer"]) == {"type", "url"}
     codex_portable_mcp = _json(plugins / "pluglayer-codex-plugin" / "mcp.json")
     assert codex_portable_mcp["$schema"].endswith("/mcp.schema.json")
     assert codex_portable_mcp["mcpServers"]["pluglayer"]["type"] == "streamable-http"
-    assert codex_portable_mcp["mcpServers"]["pluglayer"]["extensions"]["com.openai"]["auth"]["type"] == "oauth"
-    codex_auth = codex_portable_mcp["mcpServers"]["pluglayer"]["extensions"]["com.openai"]["auth"]
-    assert codex_auth["authorizationServerBase"] == "https://api.pluglayer.com/v1/mcp/oauth"
-    assert codex_auth["authorizationUrl"] == "https://api.pluglayer.com/v1/mcp/oauth/authorize"
-    assert codex_auth["tokenUrl"] == "https://api.pluglayer.com/v1/mcp/oauth/token"
-    assert codex_auth["registrationUrl"] == "https://api.pluglayer.com/v1/mcp/oauth/register"
-    assert codex_auth["resource"] == "https://mcp.pluglayer.com/mcp"
+    # Codex 0.162 rejects server-level extensions before reaching OAuth. Both
+    # package formats rely on protected-resource/authorization-server discovery.
+    assert set(codex_portable_mcp["mcpServers"]["pluglayer"]) == {"type", "url"}
     assert _json(plugins / "pluglayer-claude-plugin" / ".mcp.json")["pluglayer"] == {"type": "http", "url": "https://mcp.pluglayer.com/mcp"}
     assert _json(plugins / "pluglayer-cursor-plugin" / "mcp.json")["pluglayer"] == {"url": "https://mcp.pluglayer.com/mcp"}
     assert _json(plugins / "pluglayer-antigravity-plugin" / "mcp_config.json")["mcpServers"]["pluglayer"] == {"serverUrl": "https://mcp.pluglayer.com/mcp"}
@@ -42,6 +38,8 @@ def test_public_plugin_icons_follow_target_manifest_schemas():
     assert codex["interface"]["composerIcon"] == "./assets/pluglayer-icon.png"
     assert codex["interface"]["logo"] == "./assets/pluglayer-icon.png"
     assert (codex_root / "assets" / "pluglayer-icon.png").is_file()
+    for interface in (codex_portable["extensions"]["com.openai"]["interface"], codex["interface"]):
+        assert 1 <= len(interface["defaultPrompt"]) <= 3
 
     cursor = _json(plugins / "pluglayer-cursor-plugin" / ".cursor-plugin" / "plugin.json")
     assert cursor["logo"] == icon_url
@@ -112,7 +110,7 @@ def test_native_agent_packs_are_complete_across_editor_plugins():
 
 def test_every_public_plugin_publishes_target_installation_instructions():
     repo_root = Path(__file__).resolve().parents[2]
-    expected_version = "1.1.38"
+    expected_version = "1.1.39"
     for target in ("codex", "claude", "cursor", "antigravity"):
         path = repo_root / "plugins" / f"pluglayer-{target}-plugin" / "installation_instruction.md"
         text = path.read_text(encoding="utf-8")
@@ -125,7 +123,7 @@ def test_every_public_plugin_publishes_target_installation_instructions():
 
 def test_all_public_plugin_versions_are_aligned():
     repo_root = Path(__file__).resolve().parents[2]
-    expected = "1.1.38"
+    expected = "1.1.39"
     versions = {
         "codex-portable": _json(repo_root / "plugins/pluglayer-codex-plugin/plugin.json")["version"],
         "codex-legacy": _json(repo_root / "plugins/pluglayer-codex-plugin/.codex-plugin/plugin.json")["version"],
@@ -134,6 +132,14 @@ def test_all_public_plugin_versions_are_aligned():
         "antigravity": (repo_root / "plugins/pluglayer-antigravity-plugin/VERSION").read_text().strip(),
     }
     assert versions == {name: expected for name in versions}
+
+
+def test_public_codex_repository_declares_one_stable_marketplace():
+    repo_root = Path(__file__).resolve().parents[2]
+    catalog = _json(repo_root / "plugins/pluglayer-codex-plugin/.agents/plugins/marketplace.json")
+    assert catalog["name"] == "pluglayer"
+    assert [entry["name"] for entry in catalog["plugins"]] == ["pluglayer-codex-plugin"]
+    assert catalog["plugins"][0]["source"] == {"source": "url", "url": "https://github.com/pluglayer/codex-plugin"}
 
 
 def test_mcp_python_sdk_stays_on_fastmcp_compatible_v1():
