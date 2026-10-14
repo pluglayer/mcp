@@ -31,6 +31,18 @@ from pluglayer_mcp.tools.shared import (
     _status_emoji,
 )
 
+
+def _planned_runtime_limits(step: dict) -> dict[str, str]:
+    """Translate the backend's GiB/core plan into API quantity strings."""
+    required = step.get("required_compute") or {}
+    limits = {}
+    if required.get("cpu_cores") is not None:
+        limits["cpu_limit"] = str(required["cpu_cores"])
+    if required.get("ram_gb") is not None:
+        limits["memory_limit"] = f"{required['ram_gb'] * 1024:g}Mi"
+    return limits
+
+
 def register_compose_tools(mcp):
     @mcp.tool()
     async def deploy_compose(
@@ -77,6 +89,7 @@ def register_compose_tools(mcp):
             database_contexts: dict[str, dict] = {}
             for item in plan.get("services") or []:
                 strategy = item.get("strategy")
+                runtime_limits = _planned_runtime_limits(item)
                 if strategy == "database_template":
                     resolved_overrides = _compose_db_env_overrides(item)
                     preview = await _preview_database_runtime(
@@ -99,6 +112,7 @@ def register_compose_tools(mcp):
                             "route_slug": item.get("suggested_route_slug"),
                             "compute_placement": compute_placement,
                             "env_overrides": resolved_overrides,
+                            **runtime_limits,
                         },
                     )
                     deployments.append(
@@ -130,8 +144,7 @@ def register_compose_tools(mcp):
                         "env_vars_json": json.dumps(resolved_env_vars),
                         "command_args_json": json.dumps(item.get("command_args") or []),
                         "replicas": "1",
-                        "cpu_limit": "500m",
-                        "memory_limit": "512Mi",
+                        **runtime_limits,
                         "exposure_type": item.get("exposure_type") or "https",
                     }
                     data = await _client().post_multipart(
@@ -169,6 +182,7 @@ def register_compose_tools(mcp):
                             "type": "compose",
                             "compose_yaml": compose_yaml_to_deploy,
                             "exposure_type": item.get("exposure_type") or "https",
+                            **runtime_limits,
                         },
                     },
                 )
