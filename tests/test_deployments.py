@@ -73,6 +73,38 @@ def test_find_existing_project_app_match_falls_back_to_name():
     assert match["id"] == "9"
 
 
+def test_hosted_mcp_missing_archive_points_at_local_upload():
+    class FakeMCP:
+        def __init__(self):
+            self.tools = {}
+
+        def tool(self):
+            def register(function):
+                self.tools[function.__name__] = function
+                return function
+
+            return register
+
+    mcp = FakeMCP()
+    register_images_tools(mcp)
+
+    try:
+        asyncio.run(
+            mcp.tools["upload_image_archive_and_deploy"](
+                project_id="project-1",
+                name="hart",
+                image_archive_path="/tmp/does-not-exist-hart.oci.tar",
+            )
+        )
+    except Exception as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("missing archive should fail")
+
+    assert "Image archive not found" in message
+    assert "begin_local_image_upload" in message
+
+
 def test_uploaded_image_redeploy_queues_without_synchronous_wait_by_default():
     class FakeMCP:
         def __init__(self):
