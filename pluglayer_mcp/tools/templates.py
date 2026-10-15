@@ -4,6 +4,7 @@ from typing import Literal
 from urllib.parse import quote
 
 from pluglayer_mcp.tools.shared import _client
+from pluglayer_mcp.tools.template_views import context_view, schema_view
 
 BASE = "/v1/plugin/templates"
 
@@ -27,13 +28,13 @@ def register_template_tools(mcp):
         return await _client().post(f"/v1/plugin/apps/{quote(app_id, safe='')}/template/update")
 
     @mcp.tool()
-    async def get_template_authoring_schema() -> dict:
-        """Get current backend JSON schemas for template create/update, submit, deploy, agent runs, and sessions.
+    async def get_template_authoring_schema(section: str = "summary") -> dict:
+        """Discover schema sections; select a section to fetch its complete backend JSON schema.
 
         Call before authoring nested template fields. Public saves are always private drafts,
         regardless of lifecycle flags. Approvals and publishing require the private Admin Center.
         """
-        return await _client().get(f"{BASE}/schema")
+        return schema_view(await _client().get(f"{BASE}/schema"), section)
 
     @mcp.tool()
     async def list_template_categories() -> dict:
@@ -112,9 +113,9 @@ def register_template_tools(mcp):
         })
 
     @mcp.tool()
-    async def get_template_agent_context() -> dict:
-        """Read available nodes and marketplace context for template builder/launch planning."""
-        return await _client().get(f"{BASE}/context")
+    async def get_template_agent_context(section: str = "summary", offset: int = 0, limit: int = 10) -> dict:
+        """Discover context sections, then page my_nodes, marketplace_nodes or templates. Template entries omit full Compose/schema content."""
+        return context_view(await _client().get(f"{BASE}/context"), section, offset, limit)
 
     @mcp.tool()
     async def run_template_agent(
@@ -142,6 +143,7 @@ def register_template_tools(mcp):
         """Queue the existing backend template launch planner and return its task ID; poll get_task_status.
 
         Use deploy_marketplace_template for an actual test/deployment. Do not claim a plan is a running app.
+        Planning creates or resumes a launch session. Close it with close_template_launch_session when finished.
         """
         return await _client().post(f"{BASE}/launch-plan", {
             "template_id": template_id, "project_id": project_id, "session_id": session_id,
@@ -154,7 +156,7 @@ def register_template_tools(mcp):
         template_id: str, project_id: str | None = None, title: str | None = None,
         new_session: bool = False,
     ) -> dict:
-        """Resume an owned active launch session or create one. Set new_session=true for a separate conversation."""
+        """Resume an owned active launch session or create one; a supplied title updates the resumed session. Set new_session=true for a separate conversation."""
         return await _client().post(f"{BASE}/sessions", {
             "template_id": template_id, "project_id": project_id, "title": title, "new_session": new_session,
         })
@@ -163,3 +165,10 @@ def register_template_tools(mcp):
     async def list_template_launch_sessions(template_id: str, project_id: str | None = None) -> dict:
         """List the user's active sessions for one template, optionally scoped to a project."""
         return await _client().get(f"{BASE}/sessions", params={"template_id": template_id, "project_id": project_id})
+
+    @mcp.tool()
+    async def close_template_launch_session(session_id: str) -> dict:
+        """Archive an owned launch conversation. Keeps history; does not cancel running tasks or remove apps."""
+        if not session_id.strip() or session_id in {".", ".."}:
+            raise ValueError("session_id is required")
+        return await _client().post(f"{BASE}/sessions/{quote(session_id, safe='')}/close")

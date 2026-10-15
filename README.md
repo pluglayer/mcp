@@ -199,7 +199,7 @@ Marketplace template deployment through MCP now supports both:
 | `get_app_logs` | Alias for getting app logs |
 | `get_app_access_policy` | Read saved IP allowlist, HTTP/TCP limits and exposure without env/connection secrets |
 | `update_app_access_policy` | Replace a complete app ingress policy through backend permission checks; exact app name and all values required |
-| `get_app_connection_env_vars` | Get concrete connection env vars and connection strings for an app/database so dependent apps can be updated correctly |
+| `get_app_connection_env_vars` | Inspect masked connection/env fields; explicit `reveal=true` returns plaintext |
 | `apply_app_env_vars` | Securely import arbitrary runtime env vars from dotenv/`KEY=VALUE`, JSON, YAML text, or a direct key/value object; merge or replace, then optionally restart/redeploy without returning values |
 | `list_marketplace_templates` | List deployable marketplace templates before choosing one for a project |
 | `get_marketplace_template` | Inspect one marketplace template, including its required env vars |
@@ -215,12 +215,12 @@ Marketplace template deployment through MCP now supports both:
 | `list_user_databases` | List the caller's provisioned databases, optionally by project |
 | `check_database_slug_availability` | Check whether a Data Layer slug is free in a project before provisioning or renaming a database |
 | `create_database` | Provision a database from a template after backend compute and project checks, resolving password-like env vars inside the MCP flow first |
-| `get_database_connection_details` | Get connection strings, env vars, and docs for a provisioned database |
+| `get_database_connection_details` | Inspect masked database fields and docs; prefer server-side env sync |
 | `sync_database_env_to_app` | Patch one app's env vars from a provisioned database's concrete connection fields, then restart the existing app |
 | `get_database_logs` | Read logs from a provisioned database app |
 | `update_database_access` | Update the public TCP IP allowlist for a provisioned database |
 | `restart_database` | Restart a provisioned database by queueing its restart flow |
-| `remove_database` | Remove a provisioned database and tear down its runtime workload/routing |
+| `remove_database` | Queue database removal and return its task ID; poll completion before reporting teardown |
 | `delete_database` | Alias for `remove_database` |
 | `list_project_domains` | List custom domains for a project |
 | `get_domains_by_project` | Alias for project-domain lookup; use this before asking which domain the user wants so existing project domains can be offered as options |
@@ -276,12 +276,15 @@ exact hostnames, so `example.com` is not automatically covered when only
 
 ## Template authoring
 
-Use `get_template_authoring_schema` and `preview_template_compose` before saving
+Use `get_template_authoring_schema(section="create_draft")` and `preview_template_compose` before saving
 with `create_template_draft`. The tools also list/read/update/clone/delete private
 drafts, submit for admin approval, expose launch context/planning/sessions, and
 update existing apps from templates. `deploy_marketplace_template` handles test
 deployments and accepts `database_bindings`. Public template tools do not publish
-or approve; those actions remain in the private Admin Center.
+or approve; those actions remain in the private Admin Center. Schema and context
+discovery default to summaries; fetch named sections and context pages as needed.
+Launch planning creates/resumes a session. `close_template_launch_session` archives
+it without cancelling tasks or deleting apps.
 
 Run `python scripts/test_local_template_mcp.py` from this package for a focused
 read-only local stdio smoke using saved credentials. The new backend routes must

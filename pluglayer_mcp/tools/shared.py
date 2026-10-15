@@ -1,6 +1,8 @@
 """Shared helpers for PlugLayer MCP tools."""
 
-from typing import Any
+from typing import Any, NoReturn
+
+from mcp.server.fastmcp.exceptions import ToolError
 
 from pluglayer_mcp.client import PlugLayerClient
 
@@ -50,8 +52,31 @@ def _fmt_task_hint(task_id: str | None) -> str:
     return f"Poll: `get_task_status('{task_id}')`" if task_id else "No task id returned."
 
 
-def _compact_error(prefix: str, exc: Exception) -> str:
-    return f"{prefix}: {exc}"
+def _compact_error(prefix: str, exc: Exception) -> NoReturn:
+    """Preserve readable failures while setting MCP's isError protocol flag."""
+    raise ToolError(f"{prefix}: {exc}") from exc
+
+
+def _connection_value(value: Any, reveal: bool) -> str:
+    # Mask every value: arbitrary env names and URIs can carry credentials.
+    return str(value) if reveal else "[REDACTED]"
+
+
+def _connection_warning(reveal: bool) -> str:
+    if reveal:
+        return "Warning: revealed values may contain secrets; never copy them into reports or feedback."
+    return "Values masked. Prefer sync_database_env_to_app for server-side wiring; use reveal=true only when explicitly needed."
+
+
+def _checked_logs(data: dict) -> str:
+    """Bridge old backends that encoded Kubernetes failures inside log text."""
+    import re
+
+    logs = data.get("logs", "No logs available")
+    failure = re.search(r"(?:\A|=== [^\n]+ \((?:current|previous)\) ===\n)(Error reading logs:[^\n]*)", logs)
+    if failure:
+        raise ToolError(failure.group(1))
+    return logs
 
 
 async def _get_compute_summary(project_id: str | None = None) -> dict[str, Any]:

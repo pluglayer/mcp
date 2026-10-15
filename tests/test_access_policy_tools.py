@@ -102,7 +102,8 @@ def test_unknown_target_or_policy_never_writes(monkeypatch, failure):
         client.app["name"] = "different-app"
     else:
         del client.app["access_policy"]
-    assert call(mcp, "update_app_access_policy", **update_args()).startswith("Error")
+    with pytest.raises(Exception, match="Error"):
+        call(mcp, "update_app_access_policy", **update_args())
     assert client.writes == []
 
 
@@ -110,7 +111,6 @@ def test_unknown_target_or_policy_never_writes(monkeypatch, failure):
 def test_failed_write_is_not_retried_or_reported_as_success(monkeypatch, failure):
     client, mcp = setup(monkeypatch)
     client.failure = failure
-    output = call(mcp, "update_app_access_policy", **update_args())
-    assert output.startswith("Error")
-    assert "inspect current state before retrying" in output
+    with pytest.raises(Exception, match="inspect current state"):
+        call(mcp, "update_app_access_policy", **update_args())
     assert len(client.writes) == 1

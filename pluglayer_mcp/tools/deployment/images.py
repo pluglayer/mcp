@@ -219,10 +219,8 @@ def register_images_tools(mcp):
 
             compute = await _get_compute_summary(project_id=project_id)
             if not compute.get("can_deploy"):
-                return (
-                    f"Cannot deploy into project `{project_id}` yet: {compute.get('message')} "
-                    "Use list_attachable_project_nodes() and attach_node_to_project(), or help the user add compute, then retry."
-                )
+                raise ValueError(f"Cannot deploy into project `{project_id}` yet: {compute.get('message')} "
+                    "Use list_attachable_project_nodes() and attach_node_to_project(), or help the user add compute, then retry.")
             payload = {
                 "name": name,
                 "route_slug": route_slug or None,
@@ -301,13 +299,11 @@ def register_images_tools(mcp):
         """Upload a locally built Docker/OCI image archive to PlugLayer. The backend rejects root-start images early, resolves non-root users before rollout, and grants write access only to app-owned persistent storage. If the target app already exists in the project, upload to that app first and redeploy it; otherwise create a new app from the mirrored image."""
         try:
             if not os.path.exists(image_archive_path):
-                return f"Image archive not found: {image_archive_path}"
+                raise ValueError(f"Image archive not found: {image_archive_path}")
             compute = await _get_compute_summary(project_id=project_id)
             if not compute.get("can_deploy"):
-                return (
-                    f"Cannot deploy into project `{project_id}` yet: {compute.get('message')} "
-                    "Use list_attachable_project_nodes() and attach_node_to_project(), or help the user add compute, then retry."
-                )
+                raise ValueError(f"Cannot deploy into project `{project_id}` yet: {compute.get('message')} "
+                    "Use list_attachable_project_nodes() and attach_node_to_project(), or help the user add compute, then retry.")
             project_apps = (await _client().get(f"/v1/plugin/projects/{project_id}/apps")).get("apps", [])
             existing_app = _find_existing_project_app_match(project_apps, name=name, route_slug=route_slug)
             if existing_app and existing_app.get("id"):
@@ -325,11 +321,7 @@ def register_images_tools(mcp):
                 task_check = data.get("task_check") or {}
                 failure_reason = _task_failure_reason(task_check)
                 if failure_reason:
-                    return (
-                        "Uploaded image redeploy failed.\n\n"
-                        f"Archive: `{image_archive_path}`\n"
-                        f"Reason: {failure_reason}"
-                    )
+                    raise RuntimeError(failure_reason)
                 await _remember_context(
                     {
                         "last_completed_task": {
@@ -435,11 +427,7 @@ def register_images_tools(mcp):
             lines.extend(_post_deploy_suggestions(app, project_apps))
             return "\n".join(lines)
         except Exception as e:
-            return (
-                "Uploaded image deployment failed.\n\n"
-                f"Archive: `{image_archive_path}`\n"
-                f"Reason: {_render_exception_reason(e)}"
-            )
+            return _compact_error("Uploaded image deployment failed", e)
 
     @mcp.tool()
     async def upload_image_archive_and_redeploy_app(
@@ -453,7 +441,7 @@ def register_images_tools(mcp):
         """Rebuild flow for existing apps: upload a newly built image archive, push it with a new tag, keep the current slug, and redeploy the existing app."""
         try:
             if not os.path.exists(image_archive_path):
-                return f"Image archive not found: {image_archive_path}"
+                raise ValueError(f"Image archive not found: {image_archive_path}")
             app_data = await _client().get(f"/v1/plugin/apps/{app_id}")
             app = app_data.get("app", {})
             data = await _upload_existing_app_archive(
@@ -470,11 +458,7 @@ def register_images_tools(mcp):
             task_check = data.get("task_check") or {}
             failure_reason = _task_failure_reason(task_check)
             if failure_reason:
-                return (
-                    "Uploaded image redeploy failed.\n\n"
-                    f"Archive: `{image_archive_path}`\n"
-                    f"Reason: {failure_reason}"
-                )
+                raise RuntimeError(failure_reason)
             return (
                 f"🔄 Rebuild + redeploy queued for **{app.get('name') or app_id}**.\n"
                 f"Slug kept: `{app.get('route_slug') or app.get('name')}`\n"
@@ -488,8 +472,4 @@ def register_images_tools(mcp):
                 + _fmt_task_hint(task_id)
             )
         except Exception as e:
-            return (
-                "Uploaded image redeploy failed.\n\n"
-                f"Archive: `{image_archive_path}`\n"
-                f"Reason: {_render_exception_reason(e)}"
-            )
+            return _compact_error("Uploaded image redeploy failed", e)
