@@ -24,6 +24,7 @@ from pluglayer_mcp.tools.deployment.helpers import (
     _slugify,
     _task_failure_reason,
 )
+from pluglayer_mcp.credentials import resolve_api_base_url
 from pluglayer_mcp.tools.shared import (
     _client,
     _compact_error,
@@ -146,6 +147,15 @@ async def _upload_chunked_archive(
         f"{session_path}/{upload_id}/{complete_action}",
         complete_payload,
         timeout=1800.0,
+    )
+
+
+def _missing_local_archive(image_archive_path: str) -> ValueError:
+    return ValueError(
+        f"Image archive not found on the PlugLayer MCP host: {image_archive_path}. "
+        "Hosted MCP cannot read files on the user's computer. Call begin_local_image_upload(), "
+        "PUT the archive from the local machine with the one-time token, then call "
+        "complete_local_image_upload()."
     )
 
 
@@ -296,10 +306,10 @@ def register_images_tools(mcp):
         mount_path: str = "/data",
         health_check_path: str = "",
     ) -> str:
-        """Upload a locally built Docker/OCI image archive to PlugLayer. The backend rejects root-start images early, resolves non-root users before rollout, and grants write access only to app-owned persistent storage. If the target app already exists in the project, upload to that app first and redeploy it; otherwise create a new app from the mirrored image."""
+        """Upload a Docker/OCI archive that is already on this MCP host. Hosted MCP cannot read a path on the user's computer; use begin_local_image_upload() and complete_local_image_upload() for that case. The backend rejects root-start images early, resolves non-root users before rollout, and grants write access only to app-owned persistent storage. If the target app already exists in the project, upload to that app first and redeploy it; otherwise create a new app from the mirrored image."""
         try:
             if not os.path.exists(image_archive_path):
-                raise ValueError(f"Image archive not found: {image_archive_path}")
+                raise _missing_local_archive(image_archive_path)
             compute = await _get_compute_summary(project_id=project_id)
             if not compute.get("can_deploy"):
                 raise ValueError(f"Cannot deploy into project `{project_id}` yet: {compute.get('message')} "
@@ -438,10 +448,10 @@ def register_images_tools(mcp):
         redeploy_strategy: str = "recreate",
         wait_seconds: int = 0,
     ) -> str:
-        """Rebuild flow for existing apps: upload a newly built image archive, push it with a new tag, keep the current slug, and redeploy the existing app."""
+        """Rebuild flow for existing apps when the archive is already on this MCP host. Hosted MCP cannot read the user's computer; use begin_local_image_upload(app_id=...) and complete_local_image_upload() instead. This pushes a new tag, keeps the current slug, and redeploys the existing app."""
         try:
             if not os.path.exists(image_archive_path):
-                raise ValueError(f"Image archive not found: {image_archive_path}")
+                raise _missing_local_archive(image_archive_path)
             app_data = await _client().get(f"/v1/plugin/apps/{app_id}")
             app = app_data.get("app", {})
             data = await _upload_existing_app_archive(
@@ -473,3 +483,162 @@ def register_images_tools(mcp):
             )
         except Exception as e:
             return _compact_error("Uploaded image redeploy failed", e)
+
+    @mcp.tool()
+    async def begin_local_image_upload(
+        filename: str,
+        size_bytes: int,
+        project_id: str = "",
+        app_id: str = "",
+    ) -> str:
+        """Start an upload for an image archive that exists only on the user's computer. Returns a one-time chunk token. Do not repeat that token to the user. PUT the bytes locally, then call complete_local_image_upload()."""
+        try:
+            if bool(project_id) == bool(app_id):
+                raise ValueError("Pass exactly one of project_id (new app) or app_id (existing app)")
+            if size_bytes < 1 or size_bytes > 20 * 1024 * 1024 * 1024:
+                raise ValueError("Archive size must be between 1 byte and 20 GB")
+            safe_name = os.path.basename(filename.strip()) or "image.oci.tar"
+            if project_id:
+                session_path = f"/v1/plugin/projects/{project_id}/apps/image-upload-sessions"
+                scope = "project"
+                scope_id = project_id
+            else:
+                session_path = f"/v1/plugin/apps/{app_id}/image-upload-sessions"
+                scope = "app"
+                scope_id = app_id
+            session = await _client().post(
+                session_path,
+                {
+                    "filename": safe_name,
+                    "size_bytes": size_bytes,
+                    "issue_client_upload_token": True,
+                },
+            )
+            token = session.get("client_upload_token")
+            upload_id = session.get("upload_id")
+            chunk_size = int(session.get("chunk_size") or 0)
+            if not token or not upload_id or chunk_size <= 0:
+                raise RuntimeError(
+                    "This PlugLayer API did not issue a client upload token. Deploy the current backend "
+                    "before using hosted local-image upload, or use GitHub Actions."
+                )
+            api_base_url = resolve_api_base_url().rstrip("/")
+            return "\n".join(
+                [
+                    "Local image upload session is ready. Upload the archive from the user's machine, then call complete_local_image_upload().",
+                    "Do not show client_upload_token to the user or put it on a command line. Pass it only as X-Pluglayer-Upload-Token.",
+                    f"api_base_url: {api_base_url}",
+                    f"upload_url: {api_base_url}/v1/plugin/image-uploads/{upload_id}/chunks/{{index}}",
+                    f"upload_id: {upload_id}",
+                    f"scope: {scope}",
+                    f"scope_id: {scope_id}",
+                    f"filename: {safe_name}",
+                    f"size_bytes: {size_bytes}",
+                    f"chunk_size: {chunk_size}",
+                    f"expires_at: {session.get('expires_at')}",
+                    f"client_upload_token: {token}",
+                ]
+            )
+        except Exception as e:
+            return _compact_error("Could not start the local image upload", e)
+
+    @mcp.tool()
+    async def complete_local_image_upload(
+        upload_id: str,
+        project_id: str = "",
+        app_id: str = "",
+        name: str = "",
+        tag: str = "latest",
+        ports: list[int] | None = None,
+        env_vars: dict[str, str] | None = None,
+        command_args: list[str] | None = None,
+        replicas: int = 1,
+        route_slug: str = "",
+        cpu_limit: str = "500m",
+        memory_limit: str = "512Mi",
+        compute_placement: str = "personal",
+        redeploy_strategy: str = "recreate",
+        registry_id: str = "",
+        storage_gb: int = 1,
+        mount_path: str = "/data",
+        health_check_path: str = "",
+        wait_seconds: int = 0,
+    ) -> str:
+        """Finish a begin_local_image_upload session after every local chunk succeeded. project_id creates an app. app_id redeploys the existing app and keeps its slug."""
+        try:
+            if bool(project_id) == bool(app_id):
+                raise ValueError("Pass exactly one of project_id (new app) or app_id (existing app)")
+            if app_id:
+                data = await _client().post(
+                    f"/v1/plugin/apps/{app_id}/image-upload-sessions/{upload_id}/complete-redeploy",
+                    {
+                        "tag": tag,
+                        "registry_id": registry_id or None,
+                        "redeploy_strategy": redeploy_strategy,
+                        "wait_seconds": wait_seconds,
+                    },
+                    timeout=1800.0,
+                )
+                task_id = data.get("task_id")
+                failure_reason = _task_failure_reason(data.get("task_check") or {})
+                if failure_reason:
+                    raise RuntimeError(failure_reason)
+                mirrored = data.get("mirrored_image")
+                return (
+                    f"🔄 Uploaded image redeploy queued for app `{app_id}`.\n"
+                    f"New image tag: `{tag}`\n"
+                    + (f"Mirrored image: `{mirrored}`\n" if mirrored else "")
+                    + f"Task ID: `{task_id}`\n"
+                    + _fmt_task_hint(task_id)
+                )
+            if not name.strip():
+                raise ValueError("name is required when creating an app from a local image upload")
+            data = await _client().post(
+                f"/v1/plugin/projects/{project_id}/apps/image-upload-sessions/{upload_id}/complete-deploy",
+                {
+                    "deploy_request": {
+                        "name": name,
+                        "route_slug": route_slug or None,
+                        "compute_placement": compute_placement,
+                        "redeploy_strategy": redeploy_strategy,
+                        "registry_id": registry_id or None,
+                        "source": {
+                            "type": "image",
+                            "image": "uploaded-archive",
+                            "tag": tag,
+                            "ports": ports or [],
+                            "env_vars": env_vars or {},
+                            "command_args": command_args or [],
+                            "replicas": replicas,
+                            "cpu_limit": cpu_limit,
+                            "memory_limit": memory_limit,
+                            "storage_gb": storage_gb,
+                            "mount_path": mount_path,
+                            "health_check_path": health_check_path or None,
+                        },
+                    },
+                    "wait_seconds": wait_seconds,
+                },
+                timeout=1800.0,
+            )
+            task_id = data.get("task_id")
+            app = data.get("app", {})
+            mirrored = data.get("mirrored_image")
+            await _remember_context(
+                {
+                    "last_completed_task": {
+                        "type": "complete_local_image_upload",
+                        "project_id": project_id,
+                        "app_id": app.get("id"),
+                        "app_name": app.get("name") or name,
+                        "route_slug": app.get("route_slug") or route_slug or name,
+                    }
+                }
+            )
+            lines = [f"🚀 Uploaded image app queued: **{name}** (id: `{app.get('id')}`). Task ID: `{task_id}`"]
+            if mirrored:
+                lines.append(f"Mirrored image: `{mirrored}`")
+            lines.append(_fmt_task_hint(task_id))
+            return "\n".join(lines)
+        except Exception as e:
+            return _compact_error("Local image upload could not be completed", e)

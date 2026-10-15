@@ -116,7 +116,9 @@ async def run(args):
                             return
                         if full:
                             tools = (await session.list_tools()).tools
-                            record('hosted_tool_catalog', len(tools) == 95, tool_count=len(tools))
+                            from pluglayer_mcp.server import mcp as source_mcp
+                            source_tools = await source_mcp.list_tools()
+                            record('hosted_tool_catalog', len(tools) == len(source_tools), tool_count=len(tools), source_count=len(source_tools))
                             record('hosted_tool_annotations', all(t.annotations and all(isinstance(getattr(t.annotations, k), bool)
                                 for k in ('readOnlyHint', 'destructiveHint', 'openWorldHint')) for t in tools))
                             for name, data in [('list_projects', {}), ('list_database_templates', {}),

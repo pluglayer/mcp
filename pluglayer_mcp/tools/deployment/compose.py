@@ -125,8 +125,12 @@ def register_compose_tools(mcp):
 
                 if strategy == "local_build_image":
                     archive_path = (local_image_archives or {}).get(item.get("service_name"))
-                    if not archive_path:
-                        raise RuntimeError(f"Missing local image archive for service {item.get('service_name')}")
+                    if not archive_path or not os.path.exists(archive_path):
+                        raise RuntimeError(
+                            f"Image archive for service {item.get('service_name')} is not on the PlugLayer MCP host. "
+                            "Hosted MCP cannot read the user's computer. Call begin_local_image_upload() for that "
+                            "service, PUT the archive locally, then call complete_local_image_upload()."
+                        )
                     resolved_env_vars, rewritten_keys = _patch_compose_env_vars(
                         item.get("env_vars") or {},
                         database_contexts=database_contexts,
