@@ -8,13 +8,13 @@ checks, and k3s orchestration stay in one backend implementation.
 """
 import sys
 
-from mcp.server.fastmcp import FastMCP
+from pluglayer_mcp.tool_metadata import PublicFastMCP
 from mcp.types import Icon
 
 from pluglayer_mcp.credentials import is_api_key_configured
 from pluglayer_mcp.settings import settings
 
-mcp = FastMCP(
+mcp = PublicFastMCP(
     "PlugLayer",
     website_url="https://pluglayer.com",
     icons=[Icon(src="https://pluglayer.com/pluglayer-icon.png")],
@@ -35,9 +35,9 @@ Current PlugLayer rules:
 - Databases are first-class Data Layer resources. Prefer the database-specific MCP tools for template discovery, provisioning, status, connection details, and logs instead of generic app deploy flows when the user needs a standard database.
 - If the user tries to deploy a standard database image through generic image/compose tools, reroute it into the same Data Layer template flow the frontend database wizard uses instead of leaving it on the generic app path.
 - When provisioning a database or deploying a marketplace template through MCP, resolve required deploy-time env vars in the MCP flow itself. Password/secret/token/key fields that are marked or implied as randomizable should be generated there instead of leaving `{{RANDOM_*}}` placeholders unresolved.
-- Treat feedback as part of the end-user workflow. Users can inspect their submitted reports and current status with list_my_feedback/get_feedback, and edit an owned report's title or description with update_my_feedback. Status and resolution remain admin-managed.
+- Treat feedback as part of the end-user workflow. Users can inspect their submitted reports and current status with list_my_feedback/get_feedback, Corrections or recurrences require a new ticket referencing the original ID; never call update_my_feedback. Status and resolution remain admin-managed.
 - Use list_my_notifications when a user asks to check PlugLayer messages, alerts, or Inbox. User-safe security incident updates arrive through the same Inbox; mark one read only when the user asks or has clearly consumed it.
-- If the user explicitly asks to report feedback, check their recent tickets when practical and update a matching report instead of creating repetitive feedback. Otherwise submit it with submit_feedback. If a PlugLayer MCP operation fails after reasonable diagnosis or one safe retry, automatically submit one concise bug report with the affected tool, expected behavior, actual behavior, and redacted error summary, then keep helping with the original task.
+- If the user explicitly asks to report feedback, check recent tickets when practical and avoid duplicate reports. Put corrections in a new ticket with Reference feedback: <previous ticket ID>. Otherwise submit it with submit_feedback. If a PlugLayer MCP operation fails after reasonable diagnosis or one safe retry, automatically submit one concise bug report with the affected tool, expected behavior, actual behavior, and redacted error summary, then keep helping with the original task.
 - Proactively submit concise feedback whenever PlugLayer causes or materially contributes to a poor user experience, challenge, friction point, confusing guidance, or bug, even when the user did not explicitly ask. Continue helping after submission and do not create duplicate tickets for the same occurrence in one conversation.
 - Never place tokens, secrets, environment-variable values, private source, full logs, or unrelated personal data in feedback. Prefer short redacted reproduction context. If feedback submission itself fails, report that separately without hiding the original problem. Guide users to the portal Feedback page when they want to attach files or video.
 
@@ -63,7 +63,7 @@ Preferred end-user deployment workflow:
 16. Every image deployment must use PlugLayer's private managed registry path; never bypass mirroring for a public source image. For user-facing database provisioning, prefer list_database_templates/check_database_slug_availability/create_database/get_database_connection_details over generic image/compose deploys; the backend privately mirrors template images too.
 17. Temporary deployment artifacts should live under a local `.pluglayer/` folder and should be removed when no longer needed. If the agent builds and pushes a local image, it should also delete that local image afterward to free the user's disk.
 18. After queueing a deploy, explain that rollout time depends on the image and cluster, and offer to check status later instead of making them wait.
-19. After a successful deploy, fetch the apps in the project and suggest or apply useful follow-up env updates such as frontend → backend URL or backend → database connection string changes. Use the app/database connection-detail tools so you can offer concrete env var values instead of vague suggestions. When the user asks for it, use the env-sync tool to patch the deployed app env vars directly and then restart the existing app instead of treating that as a brand-new deploy.
+19. After a successful deploy, fetch the apps in the project and suggest or apply useful follow-up env updates such as frontend → backend URL or backend → database connection string changes. Connection-detail tools mask values by default. Prefer sync_database_env_to_app to wire values server-side; reveal=true is only for an explicit need and must never feed a report or feedback. When the user asks for it, use the env-sync tool to patch the deployed app env vars directly and then restart the existing app instead of treating that as a brand-new deploy.
 20. When updating only env vars, explain that the app will restart/redeploy and remind the user they can ask to update env vars later any time.
 21. After completed tasks or whenever the agent learns something valuable about the user's app style or infrastructure preferences, update user context.
 22. Before deploying or renaming an app slug that uses the default PlugLayer URL, check whether the desired slug is already taken in that project. A project display-name rename uses rename_project and does not change routing.

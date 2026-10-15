@@ -11,6 +11,7 @@ from starlette.responses import JSONResponse
 from pluglayer_mcp.credentials import reset_remote_api_key, set_remote_api_key
 from pluglayer_mcp.server import mcp
 from pluglayer_mcp.settings import settings
+from pluglayer_mcp.remote_auth import BearerValidator
 
 
 def oauth_authorization_server_metadata() -> dict[str, object]:
@@ -36,6 +37,7 @@ class BearerMiddleware:
 
     def __init__(self, app):
         self.app = app
+        self.validator = BearerValidator()
 
     @staticmethod
     def _resource_metadata_url(scope) -> str:
@@ -73,7 +75,19 @@ class BearerMiddleware:
             return
         bearer = token.strip()
         if not bearer.startswith("ploa_") or any(ord(character) < 32 or ord(character) == 127 for character in bearer):
-            response = JSONResponse({"error": "invalid_authorization"}, status_code=401)
+            status = 401
+        else:
+            status = await self.validator.validate(bearer)
+        if status != 200:
+            headers = {"Cache-Control": "no-store"}
+            if status == 401:
+                headers["WWW-Authenticate"] = (
+                    f'Bearer error="invalid_token", resource_metadata="{self._resource_metadata_url(scope)}"'
+                )
+            response = JSONResponse(
+                {"error": "authentication_unavailable" if status == 503 else "invalid_authorization"},
+                status_code=status, headers=headers,
+            )
             await response(scope, receive, send)
             return
         context = set_remote_api_key(bearer)

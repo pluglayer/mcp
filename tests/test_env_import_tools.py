@@ -1,3 +1,5 @@
+import pytest
+from mcp.server.fastmcp.exceptions import ToolError
 import asyncio
 
 from pluglayer_mcp.tools.deployment import env_import
@@ -70,6 +72,5 @@ def test_apply_app_env_vars_rejects_implicit_clear_all():
     mcp = FakeMCP()
     register_env_import_tools(mcp)
 
-    output = asyncio.run(mcp.tools["apply_app_env_vars"]("app-1", merge=False, restart_mode="none"))
-
-    assert "explicit source" in output
+    with pytest.raises(ToolError, match="explicit source"):
+        asyncio.run(mcp.tools["apply_app_env_vars"]("app-1", merge=False, restart_mode="none"))

@@ -158,7 +158,7 @@ def register_feedback_tools(mcp):
         """
         cleaned_id = (feedback_id or "").strip()
         if not cleaned_id:
-            return "Error updating feedback: feedback_id is required."
+            raise ValueError("Error updating feedback: feedback_id is required.")
 
         updates = {}
         if title:
@@ -166,7 +166,7 @@ def register_feedback_tools(mcp):
         if description:
             updates["description"] = _safe_optional(description, 6000)
         if not updates:
-            return "Error updating feedback: provide a new title or description."
+            raise ValueError("Error updating feedback: provide a new title or description.")
 
         try:
             payload = await _client().patch(f"/v1/plugin/feedback/{cleaned_id}", data=updates)

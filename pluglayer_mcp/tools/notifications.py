@@ -43,7 +43,7 @@ def register_notification_tools(mcp):
         """Mark one authenticated-user PlugLayer Inbox message as read."""
         cleaned_id = (notification_id or "").strip()
         if not cleaned_id:
-            return "Error marking PlugLayer Inbox message read: notification_id is required."
+            raise ValueError("Error marking PlugLayer Inbox message read: notification_id is required.")
         try:
             payload = await _client().post(f"/v1/plugin/notifications/{cleaned_id}/read")
             item = payload.get("notification", payload)

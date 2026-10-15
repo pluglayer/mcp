@@ -76,7 +76,7 @@ def register_access_policy_tools(mcp):
             app = data.get("app") or {}
             _policy_view(app)  # Fail closed when an older backend omits the policy.
             if not confirmed_app_name or confirmed_app_name != app.get("name"):
-                return "Error updating app access policy: exact app name does not match; no changes made."
+                raise ValueError("Error updating app access policy: exact app name does not match; no changes made.")
             result = await client.put(f"/v1/plugin/apps/{app_id}/access", {
                 "http_rate_limit": {
                     "average": http_average, "burst": http_burst,

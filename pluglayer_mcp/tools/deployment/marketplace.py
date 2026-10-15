@@ -116,14 +116,14 @@ def register_marketplace_tools(mcp):
         """Deploy a marketplace template into an existing project or a brand-new project created during the same flow. Secret-like required env vars are auto-resolved here before the deploy request is sent."""
         try:
             if not project_id and not project_name:
-                return "Template deployment needs either `project_id` or `project_name`."
+                raise ValueError("Template deployment needs either `project_id` or `project_name`.")
             compute = await _get_compute_summary(project_id=project_id or None)
             if not compute.get("can_deploy"):
                 suffix = (
                     " Use list_attachable_project_nodes() and attach_node_to_project(), or help the user add compute, then retry."
                     if project_id else " Help the user add compute before creating and deploying into the new project."
                 )
-                return f"Cannot deploy yet: {compute.get('message')}{suffix}"
+                raise ValueError(f"Cannot deploy yet: {compute.get('message')}{suffix}")
             template_data = await _client().get(f"/v1/plugin/marketplace/templates/{template_id}")
             template = template_data.get("template", {})
             route_slug_value = route_slug or _slugify(app_name)

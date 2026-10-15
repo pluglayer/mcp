@@ -24,6 +24,9 @@ from pluglayer_mcp.tools.deployment.helpers import (
 )
 from pluglayer_mcp.tools.shared import (
     _client,
+    _connection_value,
+    _connection_warning,
+    _checked_logs,
     _compact_error,
     _fmt_task_hint,
     _get_compute_summary,
@@ -43,6 +46,8 @@ def register_app_read_tools(mcp):
             result = f"{_status_emoji(status)} **App Status**\nStatus: {status}\nURL: {app.get('primary_url') or 'not yet available'}\n"
             if k8s:
                 result += f"Replicas: {k8s.get('ready_replicas', 0)}/{k8s.get('replicas', 0)} ready\n"
+            reachability = (data.get("runtime") or {}).get("node_reachability") or {}
+            result += f"Node reachability: {reachability.get('status', 'unknown')} (logs/exec require separate verification)\n"
             return result
         except Exception as e:
             return _compact_error("Error getting app status", e)
@@ -52,13 +57,13 @@ def register_app_read_tools(mcp):
         """Get recent logs from an app."""
         try:
             data = await _client().get(f"/v1/plugin/apps/{deployment_id}/logs", params={"tail": lines})
-            return f"📋 **Logs** (last {lines} lines):\n\n```\n{data.get('logs', 'No logs available')}\n```"
+            return f"📋 **Logs** (last {lines} lines):\n\n```\n{_checked_logs(data)}\n```"
         except Exception as e:
             return _compact_error("Error getting logs", e)
 
     @mcp.tool()
-    async def get_app_connection_env_vars(app_id: str) -> str:
-        """Get env vars and connection fields for an app. Use this after provisioning so you can update dependent apps with the right URLs or connection strings."""
+    async def get_app_connection_env_vars(app_id: str, reveal: bool = False) -> str:
+        """Inspect masked env/connection fields. Set reveal=true only when plaintext is explicitly needed. Prefer sync_database_env_to_app for server-side wiring."""
         try:
             data = await _client().get(f"/v1/plugin/apps/{app_id}")
             app = data.get("app", {})
@@ -69,12 +74,13 @@ def register_app_read_tools(mcp):
                 f"Route slug: `{app.get('route_slug') or app.get('name')}`",
                 f"Primary host: {app.get('primary_hostname') or 'not ready yet'}",
             ]
+            lines.append(_connection_warning(reveal))
             if env_vars:
                 lines.append("\nEnv vars:")
-                lines.extend([f"- `{key}` = `{value}`" for key, value in env_vars.items()])
+                lines.extend([f"- `{key}` = `{_connection_value(value, reveal)}`" for key, value in env_vars.items()])
             if connection_fields:
                 lines.append("\nConnection fields:")
-                lines.extend([f"- `{field.get('key')}` = `{field.get('value')}`" for field in connection_fields])
+                lines.extend([f"- `{field.get('key')}` = `{_connection_value(field.get('value'), reveal)}`" for field in connection_fields])
             if not env_vars and not connection_fields:
                 lines.append("\nNo env vars or connection fields are available yet.")
             return "\n".join(lines)
