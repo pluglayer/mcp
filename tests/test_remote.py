@@ -19,7 +19,9 @@ def _app(seen=None):
     return remote.BearerMiddleware(Starlette(routes=[Route("/mcp", endpoint, methods=["GET"])]))
 
 
-def test_remote_api_key_is_request_scoped():
+def test_remote_api_key_is_request_scoped(monkeypatch):
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr(remote.BearerValidator, "validate", AsyncMock(return_value=200))
     seen = []
 
     async def run():

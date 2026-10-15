@@ -1,3 +1,5 @@
+import pytest
+from mcp.server.fastmcp.exceptions import ToolError
 import asyncio
 
 import httpx
@@ -145,10 +147,10 @@ def test_update_feedback_requires_an_owned_ticket_id_and_new_text(monkeypatch):
     mcp = FakeMCP()
     register_feedback_tools(mcp)
 
-    assert "feedback_id is required" in asyncio.run(mcp.tools["update_my_feedback"](""))
-    assert "provide a new title or description" in asyncio.run(
-        mcp.tools["update_my_feedback"]("feedback-1")
-    )
+    with pytest.raises(ValueError, match="feedback_id is required"):
+        asyncio.run(mcp.tools["update_my_feedback"](""))
+    with pytest.raises(ValueError, match="provide a new title or description"):
+        asyncio.run(mcp.tools["update_my_feedback"]("feedback-1"))
 
 
 def test_post_form_uses_form_encoding_and_unwraps_envelope(monkeypatch):

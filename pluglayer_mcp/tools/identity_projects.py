@@ -121,7 +121,7 @@ def register_identity_project_tools(mcp):
         try:
             clean_name = new_name.strip()
             if len(clean_name) < 2 or len(clean_name) > 50:
-                return "❌ Project name must be between 2 and 50 characters."
+                raise ValueError("❌ Project name must be between 2 and 50 characters.")
             data = await _client().patch(
                 f"/v1/plugin/projects/{project_id}",
                 {"name": clean_name},
@@ -168,25 +168,25 @@ def register_identity_project_tools(mcp):
         """
         clean_project_id = (project_id or "").strip()
         if not clean_project_id:
-            return "❌ Project ID is required."
+            raise ValueError("❌ Project ID is required.")
 
         updates = {}
         if name:
             clean_name = name.strip()
             if len(clean_name) < 2 or len(clean_name) > 50:
-                return "❌ Project name must be between 2 and 50 characters."
+                raise ValueError("❌ Project name must be between 2 and 50 characters.")
             updates["name"] = clean_name
         if clear_description and description:
-            return "❌ Provide a description or set clear_description=true, not both."
+            raise ValueError("❌ Provide a description or set clear_description=true, not both.")
         if clear_description:
             updates["description"] = ""
         elif description:
             clean_description = description.strip()
             if not clean_description:
-                return "❌ Use clear_description=true to remove the project description."
+                raise ValueError("❌ Use clear_description=true to remove the project description.")
             updates["description"] = clean_description
         if not updates:
-            return "❌ Provide a project name, description, or clear_description=true."
+            raise ValueError("❌ Provide a project name, description, or clear_description=true.")
 
         try:
             data = await _client().patch(

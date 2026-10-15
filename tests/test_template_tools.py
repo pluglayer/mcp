@@ -46,7 +46,7 @@ async def test_template_roundtrip_uses_plugin_auth_and_preserves_nested_fields(m
 async def test_all_public_template_tools_are_registered_without_admin_actions(monkeypatch):
     mcp = make_server(monkeypatch, AsyncMock())
     tools = {tool.name: tool for tool in await mcp.list_tools()}
-    assert len(tools) == 16
+    assert len(tools) == 17
     assert {'get_template_authoring_schema', 'preview_template_compose', 'clone_template_draft',
             'delete_template_draft', 'submit_template_for_approval', 'list_my_templates',
             'create_template_launch_session', 'list_template_launch_sessions', 'plan_template_launch',

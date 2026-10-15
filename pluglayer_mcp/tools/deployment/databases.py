@@ -24,6 +24,9 @@ from pluglayer_mcp.tools.deployment.helpers import (
 )
 from pluglayer_mcp.tools.shared import (
     _client,
+    _connection_value,
+    _connection_warning,
+    _checked_logs,
     _compact_error,
     _fmt_task_hint,
     _get_compute_summary,
@@ -89,14 +92,14 @@ def register_databases_tools(mcp):
         """Provision a database from a ready marketplace template. The MCP tool resolves required DB names and secret-like template fields here, including random password generation, before sending the deploy request."""
         try:
             if not project_id and not project_name:
-                return "Database provisioning needs either `project_id` or `project_name`."
+                raise ValueError("Database provisioning needs either `project_id` or `project_name`.")
             compute = await _get_compute_summary(project_id=project_id or None)
             if not compute.get("can_deploy"):
                 suffix = (
                     " Use list_attachable_project_nodes() and attach_node_to_project(), or help the user add compute, then retry."
                     if project_id else " Help the user add compute before provisioning into the new project."
                 )
-                return f"Cannot provision the database yet: {compute.get('message')}{suffix}"
+                raise ValueError(f"Cannot provision the database yet: {compute.get('message')}{suffix}")
             templates_data = await _client().get("/v1/plugin/databases/templates")
             templates = templates_data.get("templates", [])
             template = next(
@@ -108,7 +111,7 @@ def register_databases_tools(mcp):
                 None,
             )
             if not template:
-                return f"Database template `{template_id}` was not found."
+                raise ValueError(f"Database template `{template_id}` was not found.")
             route_slug_value = route_slug or _slugify(app_name)
             if project_id:
                 availability = await _check_database_slug_availability(project_id, route_slug_value)
@@ -172,8 +175,8 @@ def register_databases_tools(mcp):
             return _compact_error("Error checking database slug availability", e)
 
     @mcp.tool()
-    async def get_database_connection_details(database_id: str) -> str:
-        """Get a provisioned database's connection strings, env vars, and docs so you can wire other apps automatically."""
+    async def get_database_connection_details(database_id: str, reveal: bool = False) -> str:
+        """Inspect masked database connection fields and docs. Set reveal=true only when plaintext is explicitly needed. Prefer sync_database_env_to_app for server-side wiring."""
         try:
             data = await _client().get(f"/v1/plugin/databases/{database_id}")
             database = data.get("database", {})
@@ -186,10 +189,11 @@ def register_databases_tools(mcp):
             ]
             if connection_fields:
                 lines.append("\nConnection fields:")
-                lines.extend([f"- `{field.get('key')}` = `{field.get('value')}`" for field in connection_fields])
+                lines.extend([f"- `{field.get('key')}` = `{_connection_value(field.get('value'), reveal)}`" for field in connection_fields])
+            lines.append(_connection_warning(reveal))
             if env_vars:
                 lines.append("\nEnv vars:")
-                lines.extend([f"- `{key}` = `{value}`" for key, value in env_vars.items()])
+                lines.extend([f"- `{key}` = `{_connection_value(value, reveal)}`" for key, value in env_vars.items()])
             if data.get("documentation_url"):
                 lines.append(f"\nDocs: {data.get('documentation_url')}")
             return "\n".join(lines)
@@ -201,7 +205,7 @@ def register_databases_tools(mcp):
         """Get recent logs from a provisioned database."""
         try:
             data = await _client().get(f"/v1/plugin/databases/{database_id}/logs", params={"tail": lines})
-            return f"📋 **Database logs** (last {lines} lines):\n\n```\n{data.get('logs', 'No logs available')}\n```"
+            return f"📋 **Database logs** (last {lines} lines):\n\n```\n{_checked_logs(data)}\n```"
         except Exception as e:
             return _compact_error("Error getting database logs", e)
 
@@ -244,7 +248,7 @@ def register_databases_tools(mcp):
         try:
             database_data = await _client().get(f"/v1/plugin/databases/{database_id}")
             database = database_data.get("database", {})
-            await _client().delete(f"/v1/plugin/databases/{database_id}")
+            data = await _client().delete(f"/v1/plugin/databases/{database_id}")
             await _remember_context(
                 {
                     "last_completed_task": {
@@ -254,7 +258,13 @@ def register_databases_tools(mcp):
                     }
                 }
             )
-            return f"🧹 Database **{database.get('name') or database_id}** removed. Its runtime workload and active PlugLayer routing were torn down."
+            task_id = data.get("task_id")
+            return (
+                f"🧹 Removal queued for database **{database.get('name') or database_id}**.\n"
+                f"Task ID: `{task_id}`\n"
+                "Its runtime workload, routing and volumes will be removed.\n"
+                f"{_fmt_task_hint(task_id)}"
+            )
         except Exception as e:
             return _compact_error("Error removing database", e)
 

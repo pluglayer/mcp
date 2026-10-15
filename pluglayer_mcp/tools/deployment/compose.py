@@ -58,10 +58,8 @@ def register_compose_tools(mcp):
         try:
             compute = await _get_compute_summary(project_id=project_id)
             if not compute.get("can_deploy"):
-                return (
-                    f"Cannot deploy into project `{project_id}` yet: {compute.get('message')} "
-                    "Use list_attachable_project_nodes() and attach_node_to_project(), or help the user add compute, then retry."
-                )
+                raise ValueError(f"Cannot deploy into project `{project_id}` yet: {compute.get('message')} "
+                    "Use list_attachable_project_nodes() and attach_node_to_project(), or help the user add compute, then retry.")
             plan = await _client().post(
                 f"/v1/plugin/projects/{project_id}/apps/compose-plan",
                 {"compose_yaml": compose_yaml},

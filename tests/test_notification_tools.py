@@ -1,3 +1,5 @@
+import pytest
+from mcp.server.fastmcp.exceptions import ToolError
 import asyncio
 
 from pluglayer_mcp.tools import notifications as notification_tools
@@ -47,4 +49,5 @@ def test_notification_tools_list_and_mark_read(monkeypatch):
 def test_mark_notification_read_requires_id(monkeypatch):
     mcp = FakeMcp()
     register_notification_tools(mcp)
-    assert "notification_id is required" in asyncio.run(mcp.tools["mark_notification_read"](""))
+    with pytest.raises(ValueError, match="notification_id is required"):
+        asyncio.run(mcp.tools["mark_notification_read"](""))

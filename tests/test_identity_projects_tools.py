@@ -1,3 +1,5 @@
+import pytest
+from mcp.server.fastmcp.exceptions import ToolError
 import asyncio
 
 from pluglayer_mcp.tools import identity_projects
@@ -89,9 +91,8 @@ def test_rename_project_rejects_invalid_display_name_without_api_call(monkeypatc
     mcp = FakeMCP()
     register_identity_project_tools(mcp)
 
-    output = asyncio.run(mcp.tools["rename_project"]("project-1", " "))
-
-    assert "between 2 and 50 characters" in output
+    with pytest.raises(ToolError, match="between 2 and 50 characters"):
+        asyncio.run(mcp.tools["rename_project"]("project-1", " "))
 
 
 def test_update_project_metadata_uses_existing_project_patch_and_remembers_context(monkeypatch):
@@ -190,14 +191,7 @@ def test_update_project_metadata_rejects_ambiguous_or_empty_changes(monkeypatch)
     mcp = FakeMCP()
     register_identity_project_tools(mcp)
 
-    empty = asyncio.run(mcp.tools["update_project_metadata"]("project-1"))
-    conflicting = asyncio.run(
-        mcp.tools["update_project_metadata"](
-            "project-1",
-            description="Keep this",
-            clear_description=True,
-        )
-    )
-
-    assert "Provide a project name, description" in empty
-    assert "not both" in conflicting
+    with pytest.raises(ValueError, match="Provide a project name, description"):
+        asyncio.run(mcp.tools["update_project_metadata"]("project-1"))
+    with pytest.raises(ValueError, match="not both"):
+        asyncio.run(mcp.tools["update_project_metadata"]("project-1", description="Keep this", clear_description=True))

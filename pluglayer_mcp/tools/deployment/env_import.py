@@ -19,15 +19,15 @@ def register_env_import_tools(mcp):
         """Import runtime env vars into an existing app from dotenv/KEY=VALUE, JSON, YAML text, or a direct key/value object, then optionally restart it. Pass file content, never a local/server file path. Values are not returned."""
         try:
             if env_content and env_vars is not None:
-                return "❌ Provide either `env_content` or `env_vars`, not both."
+                raise ValueError("❌ Provide either `env_content` or `env_vars`, not both.")
             if not merge and not env_content and env_vars is None:
-                return "❌ Replace mode requires an explicit source; pass `env_vars={}` only when you intend to clear every environment variable."
+                raise ValueError("❌ Replace mode requires an explicit source; pass `env_vars={}` only when you intend to clear every environment variable.")
             if input_format not in {"auto", "dotenv", "json", "yaml"}:
-                return "❌ `input_format` must be one of `auto`, `dotenv`, `json`, or `yaml`."
+                raise ValueError("❌ `input_format` must be one of `auto`, `dotenv`, `json`, or `yaml`.")
             if restart_mode not in {"restart", "redeploy", "none"}:
-                return "❌ `restart_mode` must be one of `restart`, `redeploy`, or `none`."
+                raise ValueError("❌ `restart_mode` must be one of `restart`, `redeploy`, or `none`.")
             if redeploy_strategy and redeploy_strategy not in {"recreate", "rolling"}:
-                return "❌ `redeploy_strategy` must be `recreate`, `rolling`, or empty."
+                raise ValueError("❌ `redeploy_strategy` must be `recreate`, `rolling`, or empty.")
 
             payload = {
                 "merge": merge,

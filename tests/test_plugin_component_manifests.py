@@ -21,7 +21,7 @@ def test_public_plugins_declare_hosted_oauth_mcp_components():
     # package formats rely on protected-resource/authorization-server discovery.
     assert set(codex_portable_mcp["mcpServers"]["pluglayer"]) == {"type", "url"}
     assert _json(plugins / "pluglayer-claude-plugin" / ".mcp.json")["pluglayer"] == {"type": "http", "url": "https://mcp.pluglayer.com/mcp"}
-    assert _json(plugins / "pluglayer-cursor-plugin" / "mcp.json")["pluglayer"] == {"url": "https://mcp.pluglayer.com/mcp"}
+    assert _json(plugins / "pluglayer-cursor-plugin" / "mcp.json")["mcpServers"]["pluglayer"] == {"url": "https://mcp.pluglayer.com/mcp"}
     assert _json(plugins / "pluglayer-antigravity-plugin" / "mcp_config.json")["mcpServers"]["pluglayer"] == {"serverUrl": "https://mcp.pluglayer.com/mcp"}
 
 
@@ -42,7 +42,10 @@ def test_public_plugin_icons_follow_target_manifest_schemas():
         assert 1 <= len(interface["defaultPrompt"]) <= 3
 
     cursor = _json(plugins / "pluglayer-cursor-plugin" / ".cursor-plugin" / "plugin.json")
-    assert cursor["logo"] == icon_url
+    assert cursor["logo"] == "./assets/pluglayer-icon.png"
+    assert (plugins / "pluglayer-cursor-plugin" / cursor["logo"]).is_file()
+    assert cursor["mcpServers"] == "./mcp.json"
+    assert cursor["hooks"] == "./hooks/hooks.json"
 
     claude = _json(plugins / "pluglayer-claude-plugin" / ".claude-plugin" / "plugin.json")
     assert "logo" not in claude and "icon" not in claude
@@ -110,7 +113,7 @@ def test_native_agent_packs_are_complete_across_editor_plugins():
 
 def test_every_public_plugin_publishes_target_installation_instructions():
     repo_root = Path(__file__).resolve().parents[2]
-    expected_version = "1.1.39"
+    expected_version = "1.1.40"
     for target in ("codex", "claude", "cursor", "antigravity"):
         path = repo_root / "plugins" / f"pluglayer-{target}-plugin" / "installation_instruction.md"
         text = path.read_text(encoding="utf-8")
@@ -123,7 +126,7 @@ def test_every_public_plugin_publishes_target_installation_instructions():
 
 def test_all_public_plugin_versions_are_aligned():
     repo_root = Path(__file__).resolve().parents[2]
-    expected = "1.1.39"
+    expected = "1.1.40"
     versions = {
         "codex-portable": _json(repo_root / "plugins/pluglayer-codex-plugin/plugin.json")["version"],
         "codex-legacy": _json(repo_root / "plugins/pluglayer-codex-plugin/.codex-plugin/plugin.json")["version"],
@@ -132,6 +135,30 @@ def test_all_public_plugin_versions_are_aligned():
         "antigravity": (repo_root / "plugins/pluglayer-antigravity-plugin/VERSION").read_text().strip(),
     }
     assert versions == {name: expected for name in versions}
+    import re
+    for target in ("codex", "claude", "cursor", "antigravity"):
+        changelog = (repo_root / f"plugins/pluglayer-{target}-plugin/CHANGELOG.md").read_text()
+        assert re.search(r"^## (\d+\.\d+\.\d+)", changelog, re.M).group(1) == expected
+
+
+def test_every_plugin_has_setup_and_claude_does_not_override_main_agent():
+    root = Path(__file__).resolve().parents[2] / "plugins"
+    for target in ("codex", "claude", "cursor", "antigravity"):
+        assert (root / f"pluglayer-{target}-plugin/skills/setup/SKILL.md").is_file()
+    assert not (root / "pluglayer-claude-plugin/settings.json").exists()
+
+
+def test_awareness_hooks_emit_only_static_context():
+    import subprocess
+    root = Path(__file__).resolve().parents[2] / "plugins"
+    for target in ("claude", "cursor"):
+        hooks = _json(root / f"pluglayer-{target}-plugin/hooks/hooks.json")["hooks"]
+        command = (hooks["SessionStart"][0]["hooks"][0] if target == "claude" else hooks["sessionStart"][0])["command"]
+        assert command.startswith("echo '") and "$" not in command and "`" not in command
+        result = subprocess.run(["/bin/sh", "-c", command], check=True, capture_output=True, text=True)
+        payload = json.loads(result.stdout)
+        context = payload["hookSpecificOutput"]["additionalContext"] if target == "claude" else payload["additional_context"]
+        assert "Unrelated work keeps the normal agent" in context
 
 
 def test_public_codex_repository_declares_one_stable_marketplace():
