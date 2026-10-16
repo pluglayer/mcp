@@ -1,7 +1,9 @@
-"""Conservative MCP hints; backend authorization remains authoritative."""
+"""Public tool hints and request credential binding; backend owns authorization."""
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
+
+from pluglayer_mcp.credentials import reset_remote_api_key, set_remote_api_key
 
 # Explicit allowlist: verbs alone are insufficient (estimates save offers and
 # DNS verification updates records). New tools default to potentially destructive.
@@ -38,6 +40,24 @@ def annotations_for(name: str) -> ToolAnnotations:
 
 
 class PublicFastMCP(FastMCP):
+    async def call_tool(self, name: str, arguments: dict):
+        # A stateful HTTP session inherits initialization's ContextVars. The
+        # SDK request context, however, follows each tools/call HTTP message.
+        try:
+            request = self.get_context().request_context.request
+        except ValueError:
+            request = None
+        if request is None:
+            return await super().call_tool(name, arguments)
+        bearer = getattr(request.state, "pluglayer_api_key", None)
+        if not bearer:
+            raise RuntimeError("Validated PlugLayer request credential is missing")
+        context = set_remote_api_key(bearer)
+        try:
+            return await super().call_tool(name, arguments)
+        finally:
+            reset_remote_api_key(context)
+
     def tool(self, *args, **kwargs):
         def decorate(function):
             options = dict(kwargs)
