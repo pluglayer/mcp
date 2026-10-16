@@ -90,6 +90,10 @@ class BearerMiddleware:
             )
             await response(scope, receive, send)
             return
+        # SDK session tasks outlive this HTTP request and inherit its ContextVars.
+        # Keep the validated credential on the request too, so tool dispatch can
+        # bind the current request's token after OAuth refresh within a session.
+        scope.setdefault("state", {})["pluglayer_api_key"] = bearer
         context = set_remote_api_key(bearer)
         try:
             await self.app(scope, receive, send)
