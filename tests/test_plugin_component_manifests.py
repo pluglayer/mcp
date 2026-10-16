@@ -117,7 +117,7 @@ def test_native_agent_packs_are_complete_across_editor_plugins():
 
 def test_every_public_plugin_publishes_target_installation_instructions():
     repo_root = Path(__file__).resolve().parents[2]
-    expected_version = "1.1.41"
+    expected_version = "1.1.42"
     for target in ("codex", "claude", "cursor", "antigravity"):
         path = repo_root / "plugins" / f"pluglayer-{target}-plugin" / "installation_instruction.md"
         text = path.read_text(encoding="utf-8")
@@ -130,7 +130,7 @@ def test_every_public_plugin_publishes_target_installation_instructions():
 
 def test_all_public_plugin_versions_are_aligned():
     repo_root = Path(__file__).resolve().parents[2]
-    expected = "1.1.41"
+    expected = "1.1.42"
     versions = {
         "codex-portable": _json(repo_root / "plugins/pluglayer-codex-plugin/plugin.json")["version"],
         "codex-legacy": _json(repo_root / "plugins/pluglayer-codex-plugin/.codex-plugin/plugin.json")["version"],
