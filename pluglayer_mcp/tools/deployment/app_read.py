@@ -31,7 +31,6 @@ from pluglayer_mcp.tools.shared import (
     _fmt_task_hint,
     _get_compute_summary,
     _remember_context,
-    _status_emoji,
 )
 
 def register_app_read_tools(mcp):
@@ -43,7 +42,10 @@ def register_app_read_tools(mcp):
             app = data.get("app", {})
             k8s = (data.get("runtime") or {}).get("k8s_status") or {}
             status = app.get("status", "unknown")
-            result = f"{_status_emoji(status)} **App Status**\nStatus: {status}\nURL: {app.get('primary_url') or 'not yet available'}\n"
+            result = f"**App Status**\nStatus: {status}\nURL: {app.get('primary_url') or 'not yet available'}\n"
+            error = str(app.get("error_message") or "").strip()
+            if error:
+                result += f"Error: {error}\n"
             if k8s:
                 result += f"Replicas: {k8s.get('ready_replicas', 0)}/{k8s.get('replicas', 0)} ready\n"
             reachability = (data.get("runtime") or {}).get("node_reachability") or {}
