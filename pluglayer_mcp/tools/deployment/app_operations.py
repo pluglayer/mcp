@@ -116,6 +116,32 @@ def register_app_operations_tools(mcp, get_logs):
             return _compact_error("Error listing app revisions", e)
 
     @mcp.tool()
+    async def move_app_project(app_id: str, target_project_id: str) -> str:
+        """Move a running app into another project the caller can write. The backend checks that the target project has enough compute, copies the app settings, waits until the copy is healthy, then removes the original. Databases, caches, and apps with disks are refused."""
+        try:
+            data = await _client().post(
+                f"/v1/plugin/apps/{app_id}/project/move",
+                {"target_project_id": target_project_id},
+            )
+            task_id = data.get("task_id")
+            await _remember_context({
+                "last_completed_task": {
+                    "type": "move_app_project",
+                    "app_id": data.get("target_app_id") or app_id,
+                    "source_app_id": app_id,
+                    "target_project_id": target_project_id,
+                }
+            })
+            return (
+                f"Project move queued for `{app_id}` into project `{target_project_id}`.\n"
+                f"New app: `{data.get('target_app_id')}`\n"
+                f"The original stays until the copy is healthy.\n"
+                f"Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
+            )
+        except Exception as e:
+            return _compact_error("Error moving app to another project", e)
+
+    @mcp.tool()
     async def move_app_compute(app_id: str, target_node_name: str) -> str:
         """Move an existing app onto another node the caller can already use. Confirm the node name before calling."""
         try:
