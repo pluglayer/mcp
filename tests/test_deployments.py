@@ -295,3 +295,35 @@ def test_get_app_logs_preserves_get_logs_alias(monkeypatch):
     output = asyncio.run(mcp.tools["get_app_logs"]("app-1", 25))
 
     assert "hello" in output
+
+
+def test_move_app_project_calls_the_backend_move(monkeypatch):
+    class FakeMCP:
+        def __init__(self):
+            self.tools = {}
+
+        def tool(self):
+            def register(function):
+                self.tools[function.__name__] = function
+                return function
+
+            return register
+
+    class FakeClient:
+        async def post(self, path, body):
+            assert path == "/v1/plugin/apps/app-1/project/move"
+            assert body == {"target_project_id": "project-2"}
+            return {"task_id": "task-1", "target_app_id": "app-2"}
+
+    async def remember(payload):
+        return None
+
+    mcp = FakeMCP()
+    register_app_operations_tools(mcp, lambda *args, **kwargs: None)
+    monkeypatch.setattr("pluglayer_mcp.tools.deployment.app_operations._client", lambda: FakeClient())
+    monkeypatch.setattr("pluglayer_mcp.tools.deployment.app_operations._remember_context", remember)
+    output = asyncio.run(mcp.tools["move_app_project"]("app-1", "project-2"))
+
+    assert "project-2" in output
+    assert "app-2" in output
+    assert "task-1" in output
