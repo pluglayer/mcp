@@ -68,6 +68,7 @@ async def _upload_existing_app_archive(
     registry_id: str,
     redeploy_strategy: str,
     wait_seconds: int,
+    env_vars: dict[str, str] | None = None,
 ) -> dict:
     size_bytes = os.path.getsize(image_archive_path)
     if size_bytes <= _CHUNKED_UPLOAD_THRESHOLD_BYTES:
@@ -78,6 +79,7 @@ async def _upload_existing_app_archive(
                 "registry_id": registry_id or "",
                 "redeploy_strategy": redeploy_strategy,
                 "wait_seconds": str(wait_seconds),
+                "env_vars_json": json.dumps(env_vars or {}),
             },
             file_field="archive",
             file_path=image_archive_path,
@@ -94,6 +96,7 @@ async def _upload_existing_app_archive(
             "registry_id": registry_id or None,
             "redeploy_strategy": redeploy_strategy,
             "wait_seconds": wait_seconds,
+            "env_vars": env_vars or {},
         },
     )
 
@@ -325,6 +328,7 @@ def register_images_tools(mcp):
                     registry_id=registry_id,
                     redeploy_strategy=redeploy_strategy,
                     wait_seconds=0,
+                    env_vars=env_vars,
                 )
                 task_id = data.get("task_id")
                 mirrored = data.get("mirrored_image")
@@ -447,6 +451,7 @@ def register_images_tools(mcp):
         registry_id: str = "",
         redeploy_strategy: str = "recreate",
         wait_seconds: int = 0,
+        env_vars: dict[str, str] | None = None,
     ) -> str:
         """Rebuild flow for existing apps when the archive is already on this MCP host. Hosted MCP cannot read the user's computer; use begin_local_image_upload(app_id=...) and complete_local_image_upload() instead. This pushes a new tag, keeps the current slug, and redeploys the existing app."""
         try:
@@ -462,6 +467,7 @@ def register_images_tools(mcp):
                 registry_id=registry_id,
                 redeploy_strategy=redeploy_strategy,
                 wait_seconds=wait_seconds,
+                env_vars=env_vars,
             )
             task_id = data.get("task_id")
             mirrored = data.get("mirrored_image")
@@ -576,6 +582,7 @@ def register_images_tools(mcp):
                         "registry_id": registry_id or None,
                         "redeploy_strategy": redeploy_strategy,
                         "wait_seconds": wait_seconds,
+                        "env_vars": env_vars or {},
                     },
                     timeout=1800.0,
                 )

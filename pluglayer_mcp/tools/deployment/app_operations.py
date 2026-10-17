@@ -97,6 +97,67 @@ def register_app_operations_tools(mcp, get_logs):
             return _compact_error("Error restarting app", e)
 
     @mcp.tool()
+    async def list_app_revisions(app_id: str) -> str:
+        """List saved deploy revisions for an app so rollback can target one of them."""
+        try:
+            data = await _client().get(f"/v1/plugin/apps/{app_id}")
+            app = data.get("app") or {}
+            revisions = app.get("revisions") or []
+            if not revisions:
+                return f"App `{app_id}` has no saved revisions yet."
+            lines = [f"Revisions for **{app.get('name') or app_id}** (current: {app.get('current_revision', 0)}):"]
+            for item in revisions:
+                lines.append(
+                    f"- revision {item.get('revision')}: {item.get('image')}:{item.get('tag')} "
+                    f"at {item.get('created_at') or 'unknown time'}"
+                )
+            return "\n".join(lines)
+        except Exception as e:
+            return _compact_error("Error listing app revisions", e)
+
+    @mcp.tool()
+    async def move_app_project(app_id: str, target_project_id: str) -> str:
+        """Move a running app into another project the caller can write. The backend checks that the target project has enough compute, copies the app settings, waits until the copy is healthy, then removes the original. Databases, caches, and apps with disks are refused."""
+        try:
+            data = await _client().post(
+                f"/v1/plugin/apps/{app_id}/project/move",
+                {"target_project_id": target_project_id},
+            )
+            task_id = data.get("task_id")
+            await _remember_context({
+                "last_completed_task": {
+                    "type": "move_app_project",
+                    "app_id": data.get("target_app_id") or app_id,
+                    "source_app_id": app_id,
+                    "target_project_id": target_project_id,
+                }
+            })
+            return (
+                f"Project move queued for `{app_id}` into project `{target_project_id}`.\n"
+                f"New app: `{data.get('target_app_id')}`\n"
+                f"The original stays until the copy is healthy.\n"
+                f"Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
+            )
+        except Exception as e:
+            return _compact_error("Error moving app to another project", e)
+
+    @mcp.tool()
+    async def move_app_compute(app_id: str, target_node_name: str) -> str:
+        """Move an existing app onto another node the caller can already use. Confirm the node name before calling."""
+        try:
+            data = await _client().post(
+                f"/v1/plugin/apps/{app_id}/compute/move",
+                {"target_node_name": target_node_name},
+            )
+            task_id = data.get("task_id")
+            return (
+                f"Move queued for app `{app_id}` onto `{target_node_name}`.\n"
+                f"Task ID: `{task_id}`\n{_fmt_task_hint(task_id)}"
+            )
+        except Exception as e:
+            return _compact_error("Error moving app compute", e)
+
+    @mcp.tool()
     async def rollback(deployment_id: str, revision: int | None = None) -> str:
         """Roll back an app to a previous revision."""
         try:
