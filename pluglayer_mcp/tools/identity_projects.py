@@ -277,14 +277,14 @@ def register_identity_project_tools(mcp):
 
     @mcp.tool()
     async def remove_project(project_id: str) -> str:
-        """Remove one of the authenticated user's projects. PlugLayer removes the project's apps first, then tears down the project and archives the record for recovery/history."""
+        """Remove one of the authenticated user's projects. PlugLayer archives the project's apps, clears and detaches dedicated nodes, then archives the project."""
         try:
             data = await _client().delete(f"/v1/plugin/projects/{project_id}")
             if data.get("task_id"):
                 return (
                     f"🧹 Project `{project_id}` removal queued.\n"
                     f"Task ID: `{data['task_id']}`\n"
-                    "App cleanup, namespace removal, and dedicated node release are still pending. "
+                    "App archival, node cleanup, node detach, and project archival are still pending. "
                     "Use get_task_status() to follow completion. Retry remove_project with the same ID if cleanup fails."
                 )
             await _remember_context({"last_completed_task": {"type": "remove_project", "project_id": project_id}})
