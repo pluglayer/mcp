@@ -28,7 +28,6 @@ from pluglayer_mcp.tools.shared import (
     _fmt_task_hint,
     _get_compute_summary,
     _remember_context,
-    _status_emoji,
 )
 
 def register_catalog_tools(mcp):
@@ -65,10 +64,12 @@ def register_catalog_tools(mcp):
                 status = app.get("status", "unknown")
                 image = app.get("image") or "compose"
                 tag = app.get("tag") or ""
+                error = str(app.get("error_message") or "").strip()
                 lines.append(
-                    f"{_status_emoji(status)} **{app.get('name')}** (id: `{app.get('id')}`)\n"
+                    f"**{app.get('name')}** (id: `{app.get('id')}`)\n"
                     f"   Status: {status} | Source: {app.get('source_type', 'image')} | Image: {image}:{tag}\n"
                     f"   URL: {app.get('primary_url') or 'not yet available'}\n"
+                    + (f"   Error: {error}\n" if error else "")
                 )
             return "\n".join(lines)
         except Exception as e:
@@ -85,9 +86,11 @@ def register_catalog_tools(mcp):
             lines = [f"Apps in project `{project_id}`:\n"]
             for app in apps:
                 status = app.get("status", "unknown")
+                error = str(app.get("error_message") or "").strip()
                 lines.append(
-                    f"{_status_emoji(status)} **{app.get('name')}** (id: `{app.get('id')}`)\n"
+                    f"**{app.get('name')}** (id: `{app.get('id')}`)\n"
                     f"   Status: {status} | URL: {app.get('primary_url') or 'not yet available'}\n"
+                    + (f"   Error: {error}\n" if error else "")
                 )
             return "\n".join(lines)
         except Exception as e:
