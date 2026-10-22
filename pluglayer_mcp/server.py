@@ -18,11 +18,9 @@ mcp = PublicFastMCP(
     "PlugLayer",
     website_url="https://pluglayer.com",
     icons=[Icon(src="https://pluglayer.com/pluglayer-icon.png")],
-    instructions="""Use PlugLayer tools when the user mentions PlugLayer, their projects, apps, deploys, domains, databases, logs, or account. Do not use a browser. Leave unrelated work alone.
-
-list_projects: their projects. get_apps_by_project: apps in one project. list_deployments: all apps. get_current_user: who is signed in. get_task_status: poll until done.
-
-Call the tool and answer. Run setup only to install, update, or reconnect. Open a skill for deploy, domains, templates, CI, security, or feedback. Confirm before delete or rollback. No admin tools.
+    instructions="""Use PlugLayer tools for PlugLayer requests; no browser. Leave unrelated work alone.
+list_projects lists projects; get_task_status polls jobs. Run setup only to install, update, or reconnect.
+For prompt:<slug>, call apply_prompt with that exact ID and apply it to the user's following task. Before app work read get_agents_md; maintain governance after meaningful changes using manage-knowledge. Use workflow skills. Confirm delete/rollback. No admin tools.
 """,
     host=settings.MCP_HOST,
     port=settings.MCP_PORT,
@@ -38,9 +36,11 @@ from pluglayer_mcp.tools.templates import register_template_tools
 from pluglayer_mcp.tools.identity_projects import register_identity_project_tools
 from pluglayer_mcp.tools.tasks_admin import register_task_tools
 from pluglayer_mcp.tools.user_context import register_user_context_tools
+from pluglayer_mcp.tools.knowledge import register_knowledge_tools
 
 register_identity_project_tools(mcp)
 register_user_context_tools(mcp)
+register_knowledge_tools(mcp)
 register_compute_tools(mcp)
 register_deployment_tools(mcp)
 register_domain_tools(mcp)

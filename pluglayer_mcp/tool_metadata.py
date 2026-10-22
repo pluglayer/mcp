@@ -22,11 +22,15 @@ inspect_local_github_repo generate_github_actions list_my_feedback get_feedback
 list_my_notifications get_template_authoring_schema list_template_categories
 preview_template_compose list_my_templates get_template_details get_template_agent_context
 list_template_launch_sessions
+get_agents_md get_governance list_governance_files list_governance_revisions
+list_marketplace_prompts list_my_prompts get_prompt get_prompt_launcher
+list_my_prompt_versions list_my_prompt_submissions
 """.split())
 
 ADDITIVE = frozenset("""
 create_project estimate_compute request_extra_compute submit_feedback
 create_template_draft clone_template_draft
+create_my_prompt submit_my_prompt apply_prompt
 """.split())
 
 
