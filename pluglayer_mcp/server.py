@@ -27,6 +27,7 @@ For prompt:<slug>, call apply_prompt with that exact ID and apply it to the user
 )
 
 from pluglayer_mcp.tools.cicd_health import register_cicd_health_tools
+from pluglayer_mcp.tools.github_cicd import register_github_cicd_tools
 from pluglayer_mcp.tools.compute import register_compute_tools
 from pluglayer_mcp.tools.deployments import register_deployment_tools
 from pluglayer_mcp.tools.domains import register_domain_tools
@@ -46,6 +47,7 @@ register_deployment_tools(mcp)
 register_domain_tools(mcp)
 register_task_tools(mcp)
 register_cicd_health_tools(mcp)
+register_github_cicd_tools(mcp)
 register_feedback_tools(mcp)
 register_notification_tools(mcp)
 register_template_tools(mcp)

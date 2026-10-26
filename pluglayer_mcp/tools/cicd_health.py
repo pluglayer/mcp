@@ -83,54 +83,24 @@ def register_cicd_health_tools(mcp):
         repo: str = "",
         repo_path: str = ".",
     ) -> str:
-        """Generate a GitHub Actions workflow YAML that builds an OCI archive and uploads it to PlugLayer for the same app."""
+        """Generate an OIDC workflow for an app with a configured GitHub deployment connection. Pass the repository explicitly for hosted MCP; repo_path is a legacy argument."""
         try:
-            detected = None
-            repo_slug = repo.strip()
-            if not repo_slug:
-                detected = _detect_github_repo(repo_path)
-                if not detected.get("ok"):
-                    return (
-                        "❌ Could not infer a GitHub repository for CI/CD setup.\n"
-                        f"Reason: {detected.get('reason')}\n"
-                        "Either fix the local git/origin setup or pass `repo=\"owner/repo\"` explicitly."
-                    )
-                repo_slug = str(detected["repo_slug"])
-
             data = await _client().get(
                 "/v1/plugin/cicd/generate/github-actions",
-                params={
-                    "project_id": project_id,
-                    "app_id": app_id,
-                    "repo": repo_slug,
-                },
+                params={"project_id": project_id, "app_id": app_id, "repo": repo.strip()},
             )
             workflow = data.get("workflow_yaml", "")
             filename = data.get("filename", ".github/workflows/deploy-pluglayer.yml")
-            repo_line = f"- GitHub repo: `{repo_slug}`\n"
-            if detected:
-                repo_line += f"- Detected from origin: `{detected['origin_url']}`\n"
             return (
-                f"📋 **GitHub Actions workflow for PlugLayer app `{data.get('app_id', app_id)}`**\n"
-                f"{repo_line}"
-                f"- Save as: `{filename}`\n\n"
-                f"```yaml\n{workflow}\n```\n\n"
-                "Setup steps:\n"
-                "1. Create this file in your repo.\n"
-                "2. The workflow uses the public reusable actions repo `pluglayer/actions`.\n"
-                "3. Add required GitHub secrets:\n"
-                "   - `PLUGLAYER_API_KEY`: your PlugLayer API token\n"
-                "4. The workflow already includes the resolved PlugLayer app id, so you do not need a `PLUGLAYER_APP_ID` secret.\n"
-                "5. Optional GitHub secrets:\n"
-                "   - `PLUGLAYER_API_URL`: defaults to `https://api.pluglayer.com`\n"
-                "   - `PLUGLAYER_BUILD_ENV_JSON`: JSON object of build-time env vars/build args to inject during image build, for example `{\"NEXT_PUBLIC_API_URL\":\"https://api.example.com\",\"SENTRY_AUTH_TOKEN\":\"...\"}`\n"
-                "   - `PLUGLAYER_ENV_JSON`: JSON object of runtime env vars to merge securely before the final restart\n"
-                "6. Commit and push to `main` or `master`.\n"
-                "7. On each push the workflow will:\n"
-                "   - build a multi-arch OCI archive\n"
-                "   - upload that image to PlugLayer for the same app id\n"
-                "   - inject CI-provided build env vars into the image build if present\n"
-                "   - merge optional runtime env vars and restart the app without changing the slug"
+                f"Automatic deployment workflow for app `{data.get('app_id', app_id)}`\n"
+                f"Repository: `{data.get('repo', repo)}`\n"
+                f"Save as: `{filename}`\n\n```yaml\n{workflow}\n```\n\n"
+                "No PlugLayer API-key secret is required. Publish this workflow through the user's "
+                "existing GitHub access and verify the first run. Future pushes to its configured "
+                "branch authenticate and deploy automatically, even when the editor is closed.\n"
+                "Optional application secrets: PLUGLAYER_BUILD_ENV_JSON and PLUGLAYER_ENV_JSON. "
+                "Existing runtime variables are retained. Do not report active deployments until "
+                "the GitHub run and PlugLayer rollout both succeed."
             )
         except Exception as e:
             return _compact_error("Error generating pipeline", e)
