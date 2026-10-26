@@ -233,7 +233,10 @@ Marketplace template deployment through MCP now supports both:
 | `detach_custom_domain` | Detach a domain while keeping verification |
 | `get_task_status` | Poll async operation progress |
 | `inspect_local_github_repo` | Check whether the local repo has git plus a GitHub `origin` configured |
-| `generate_github_actions` | Get GitHub Actions YAML for a 3-step PlugLayer CI/CD flow: build OCI image, upload it to the same app id, then merge env vars and restart/redeploy |
+| `get_github_deployment` | Inspect an app's GitHub connection and first-run verification state |
+| `configure_github_deployment` | Owner-authorized binding to exact GitHub repository/owner IDs, branch and workflow |
+| `disconnect_github_deployment` | Revoke an app's automatic deployment connection and outstanding CI credentials |
+| `generate_github_actions` | Generate a pinned OIDC workflow for a configured connection; no deployment API-key secret |
 
 ## Example Conversations
 
@@ -246,14 +249,18 @@ Marketplace template deployment through MCP now supports both:
 **CI/CD setup:**
 > "Generate a GitHub Actions workflow for my `api` app so every push rebuilds it, uploads it to PlugLayer, and redeploys the same app id."
 
-The generated workflow expects:
-- public reusable actions from `pluglayer/actions`
-- required secrets:
-  - `PLUGLAYER_API_KEY`
-- optional secrets:
-  - `PLUGLAYER_API_URL` (defaults to `https://api.pluglayer.com`)
-  - `PLUGLAYER_BUILD_ENV_JSON` (JSON object of build-time env vars/build args to inject during image build)
-  - `PLUGLAYER_ENV_JSON` (JSON object of runtime env vars securely imported before the final restart)
+The agent configures the existing app using its PlugLayer OAuth connection and
+reads repository metadata using the user's GitHub access. If access is missing,
+it guides one-time browser authentication. Hosted MCP never inspects the user's
+local filesystem; repository detection belongs to the agent.
+
+The generated workflow builds an image and uses GitHub OIDC to obtain a short-lived,
+app-scoped deployment credential. Future pushes need no editor login and no
+`PLUGLAYER_API_KEY` secret. Optional `PLUGLAYER_BUILD_ENV_JSON` and
+`PLUGLAYER_ENV_JSON` remain application secrets; existing runtime variables are
+retained. Setup is verified only after GitHub and the PlugLayer rollout succeed.
+Workflow generation requires a published immutable OIDC Actions release configured
+in the backend; report that release prerequisite if generation is unavailable.
 
 **Add a custom domain:**
 > "Add `api.example.com` to my production project, detect the provider, show me the DNS records in a table, then verify it and attach it to my API app."
@@ -269,12 +276,15 @@ exact hostnames, so `example.com` is not automatically covered when only
 **Reuse an existing database instead of creating a new one:**
 > "Check whether I already have a Mongo or Postgres database in my project. If I do, show me the connection details and suggest the backend env vars I should update."
 
-## Getting Your API Key
+## Legacy local stdio credentials
 
-1. Go to PlugLayer Settings
-2. Create a **PlugLayer API token**
-3. Copy it once and store it safely
-4. Use it as `PLUGLAYER_API_KEY` for MCP, editor plugins, and the 3-step CI/CD actions flow
+Hosted editor plugins use browser OAuth. New GitHub workflows use OIDC. Neither
+requires users to manually copy a PlugLayer API key.
+
+Self-managed local stdio installations may still use a user-issued PlugLayer API
+token stored in their local credential file or `PLUGLAYER_API_KEY`. Existing
+key-based Actions remain available for compatibility; migrating a workflow must
+not delete repository secrets still used by other jobs.
 
 ## Template authoring
 

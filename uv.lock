@@ -379,7 +379,7 @@ wheels = [
 
 [[package]]
 name = "pluglayer-mcp"
-version = "0.1.17"
+version = "0.1.18"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
