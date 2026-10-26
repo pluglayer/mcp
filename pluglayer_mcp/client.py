@@ -5,7 +5,7 @@ import httpx
 
 from pluglayer_mcp.credentials import resolve_api_base_url, resolve_api_key
 
-_USER_AGENT = "pluglayer-mcp/0.1.17"
+_USER_AGENT = "pluglayer-mcp/0.1.18"
 
 
 def _stringify_detail(detail: Any) -> str:
